@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "codebase-memory-mcp": {
+      "command": "{{CBRLM_BINARY}}",
+      "args": [],
+      "env": {
+        "CBRLM_PROJECT_PREFIX": "cbrlm+",
+        "CBRLM_AGENT": "generic"
+      }
+    }
+  }
+}

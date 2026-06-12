@@ -1,0 +1,49 @@
+{
+  "schema_version": "0.1",
+  "name": "codebase-memory-mcp",
+  "display_name": "CBRLM Codebase Memory MCP",
+  "version": "0.1.0",
+  "transport": "stdio",
+  "command": "cbrlm",
+  "args": [],
+  "env": {
+    "CBRLM_PROJECT_PREFIX": "cbrlm+",
+    "CBRLM_AGENT": "generic"
+  },
+  "capabilities": {
+    "tools": true,
+    "resources": false,
+    "prompts": false
+  },
+  "tools": [
+    "index_repository",
+    "index_status",
+    "search_graph",
+    "trace_path",
+    "get_code_snippet",
+    "get_graph_schema",
+    "get_architecture",
+    "query_graph",
+    "search_code",
+    "detect_changes",
+    "ingest_traces",
+    "manage_adr",
+    "rlm_filter",
+    "rlm_scan",
+    "rlm_chunk",
+    "rlm_peek",
+    "rlm_read_symbol",
+    "rlm_workflow"
+  ],
+  "install": {
+    "windows_binary": "target/release/cbrlm.exe",
+    "unix_binary": "target/release/cbrlm",
+    "recommended_command": "cbrlm install --yes --all",
+    "manual_templates": [
+      "packaging/mcp/generic-mcp.json",
+      "packaging/mcp/codex-config.toml",
+      "packaging/mcp/opencode.json",
+      "packaging/mcp/claude-settings.json"
+    ]
+  }
+}

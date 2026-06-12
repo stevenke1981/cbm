@@ -1,0 +1,19 @@
+{
+  "mcp": {
+    "codebase-memory-mcp": {
+      "type": "local",
+      "command": [
+        "pwsh",
+        "-NoProfile",
+        "-Command",
+        "& \"{{CBRLM_BINARY}}\""
+      ],
+      "enabled": true,
+      "timeout": 120000,
+      "environment": {
+        "CBRLM_PROJECT_PREFIX": "cbrlm+",
+        "CBRLM_AGENT": "opencode"
+      }
+    }
+  }
+}

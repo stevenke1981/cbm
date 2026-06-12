@@ -18,6 +18,7 @@ Parity status: [`PARITY_MATRIX.md`](PARITY_MATRIX.md)
 | MCP stdio server | Usable |
 | CLI tool dispatch | Usable with `--json --quiet` |
 | Agent install hooks | OpenCode, Codex, Claude-style configs |
+| MCP handoff package | `packaging/mcp/` templates and manifest |
 | Graph store | SQLite + optional `.codebase-memory/graph.db.zst` export |
 | Semantic edges | Optional via `CBRLM_SEMANTIC_ENABLED=1` |
 | Full reference parity | Not complete; see `PARITY_MATRIX.md` backlog |
@@ -102,6 +103,30 @@ Platform helper scripts:
 - `scripts\install.ps1`
 - `scripts/install.sh`
 
+### Package As MCP For Other Agents
+
+CBRLM is packaged as the MCP server `codebase-memory-mcp`.
+
+Automatic install:
+
+```powershell
+.\target\release\cbrlm.exe install --yes --all
+```
+
+Manual handoff package:
+
+```text
+packaging/mcp/
+  README.md
+  manifest.json
+  generic-mcp.json
+  codex-config.toml
+  opencode.json
+  claude-settings.json
+```
+
+Use `packaging/mcp/manifest.json` when an agent wants a machine-readable package summary. Use the config templates when an MCP client needs manual setup. Replace `{{CBRLM_BINARY}}` with the absolute path to the built or installed binary.
+
 ### Release Packaging
 
 ```powershell
@@ -179,6 +204,7 @@ For Linux/macOS-only edits, use the `.sh` smoke script where appropriate.
 - Keep docs honest about MVP vs full reference parity.
 - If you change README claims, update `PARITY_MATRIX.md` or `RUST_REWRITE_TODO.md` when the claim affects parity/status.
 - If you add a new supported behavior, add a regression test or smoke gate near the behavior.
+- If you change the MCP server name, command shape, or environment contract, update `packaging/mcp/` and the installer together.
 
 ## CLI Output Contract
 
