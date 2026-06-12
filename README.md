@@ -30,10 +30,13 @@ cbrlm cli index_repository --json --quiet '{"repo_path":".","project":"x","mode"
 ### Test & lint (Section 4 quality gates)
 
 ```powershell
+cargo fmt --check
 cargo test
 cargo clippy --all-targets -- -D warnings
 cargo build --release
 ```
+
+Run `cargo fmt` before committing — CI enforces `cargo fmt --check`.
 
 One-shot gates + smoke checks:
 
@@ -138,4 +141,4 @@ src/
 
 ## Contributing / next work
 
-**MVP rewrite complete** (Sections 3–6). **Full reference parity is not** — see [Full parity backlog](PARITY_MATRIX.md#full-parity-backlog) in `PARITY_MATRIX.md`. Run `.\scripts\smoke-quality-gates.ps1` and `.\scripts\smoke-release-artifact.ps1` before release milestones.
+**Rust MVP rewrite complete** (Sections 3–7). This is **not** a full reference replica — FoundationDB is omitted by design and SQLite is canonical. **Full reference parity backlog remains** — see [Full parity backlog](PARITY_MATRIX.md#full-parity-backlog) in `PARITY_MATRIX.md`. Run `.\scripts\smoke-quality-gates.ps1` and `.\scripts\smoke-release-artifact.ps1` before release milestones.

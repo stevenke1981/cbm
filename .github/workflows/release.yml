@@ -28,6 +28,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: .
+      - run: cargo fmt --check
       - run: cargo test --all-targets
 
   build:
@@ -91,7 +92,10 @@ jobs:
       - name: Smoke release artifact (Windows)
         if: matrix.archive == 'zip'
         shell: pwsh
-        run: ./scripts/smoke-release-artifact.ps1 -SkipBuild
+        run: |
+          ./scripts/smoke-release-artifact.ps1 -SkipBuild -SkipPackage `
+            -ArtifactName "${{ matrix.artifact }}" `
+            -ArchivePath "dist/${{ matrix.artifact }}.zip"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

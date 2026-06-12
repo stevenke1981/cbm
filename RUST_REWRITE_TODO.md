@@ -879,6 +879,8 @@ Acceptance criteria:
 
 ## Section 7 - Post-Composer 2.5 Review Notes
 
+**Status: complete (#all)** — items 7.1–7.7 done; see `PARITY_MATRIX.md` Section 7 table.
+
 Review date: 2026-06-12
 
 Reviewer: Codex
@@ -900,6 +902,8 @@ Context:
 The Rust MVP now behaves much more like a usable CBM replacement. The remaining items below are not blockers for the current MVP, but they are important before claiming stronger full-reference parity or release-grade automation.
 
 ### TODO 7.1 - Make Release Artifact Smoke Matrix-Aware
+
+Status: **Done** (2026-06-12) — `-ArtifactName`, `-BinaryPath`, `-ArchivePath`, `-SkipPackage`; release.yml uses matrix archive.
 
 Priority: `P1`
 
@@ -927,6 +931,8 @@ Acceptance criteria:
 
 ### TODO 7.2 - Add `cargo fmt --check` To CI And Smoke Gates
 
+Status: **Done** (2026-06-12) — CI, smoke-quality-gates, README.
+
 Priority: `P1`
 
 Observation:
@@ -949,6 +955,8 @@ Acceptance criteria:
 
 ### TODO 7.3 - Add Process-Level CLI JSON Tests
 
+Status: **Done** (2026-06-12) — `tests/cli_process_test.rs` with `assert_cmd`.
+
 Priority: `P2`
 
 Observation:
@@ -970,6 +978,8 @@ Acceptance criteria:
 - PowerShell and Unix script examples match tested behavior.
 
 ### TODO 7.4 - Harden RLM Session Persistence Writes
+
+Status: **Done** (2026-06-12) — atomic temp+rename, corrupt file removal, persistence tests.
 
 Priority: `P2`
 
@@ -998,6 +1008,8 @@ Acceptance criteria:
 
 ### TODO 7.5 - Deepen CALLS Precision Fixtures Beyond Direct Resolver Tests
 
+Status: **Done** (2026-06-12) — `tests/calls_pipeline_test.rs` full-pipeline fixtures.
+
 Priority: `P1`
 
 Observation:
@@ -1025,6 +1037,8 @@ Acceptance criteria:
 
 ### TODO 7.6 - Add Installer And MCP Protocol Smoke From Release Artifact
 
+Status: **Done** (2026-06-12) — install dry-run + MCP initialize/tools/list in smoke-release-artifact.ps1.
+
 Priority: `P2`
 
 Observation:
@@ -1046,6 +1060,8 @@ Acceptance criteria:
 - Installer dry-run validates paths and config snippets without touching the real user config.
 
 ### TODO 7.7 - Clarify "MVP Complete" vs "Rust Replica" In Project Language
+
+Status: **Done** (2026-06-12) — consistent "Rust MVP rewrite complete" wording in README and PARITY_MATRIX.
 
 Priority: `P2`
 

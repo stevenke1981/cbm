@@ -1,7 +1,9 @@
 use crate::error::Result;
 use crate::rlm::session::ScanSession;
+use std::io::Write;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
+use uuid::Uuid;
 
 pub const SESSION_TTL_SECS: u64 = 3600;
 pub const MAX_PERSISTED_SESSIONS: usize = 50;
@@ -21,7 +23,14 @@ pub fn persist_session(session: &ScanSession) -> Result<()> {
     let dir = sessions_dir();
     std::fs::create_dir_all(&dir)?;
     let path = dir.join(format!("{}.json", session.id));
-    std::fs::write(path, serde_json::to_string(session)?)?;
+    let tmp = dir.join(format!("{}.{}.tmp", session.id, Uuid::new_v4()));
+    let content = serde_json::to_string(session)?;
+    {
+        let mut file = std::fs::File::create(&tmp)?;
+        file.write_all(content.as_bytes())?;
+        file.sync_all()?;
+    }
+    std::fs::rename(&tmp, &path)?;
     Ok(())
 }
 
@@ -39,6 +48,7 @@ pub fn load_persisted_sessions() -> Result<Vec<ScanSession>> {
         return Ok(Vec::new());
     }
     let mut sessions = Vec::new();
+    let mut skipped_corrupt = 0usize;
     for entry in std::fs::read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
@@ -46,11 +56,20 @@ pub fn load_persisted_sessions() -> Result<Vec<ScanSession>> {
             continue;
         }
         let Ok(content) = std::fs::read_to_string(&path) else {
+            let _ = std::fs::remove_file(&path);
+            skipped_corrupt += 1;
             continue;
         };
-        if let Ok(session) = serde_json::from_str::<ScanSession>(&content) {
-            sessions.push(session);
+        match serde_json::from_str::<ScanSession>(&content) {
+            Ok(session) => sessions.push(session),
+            Err(_) => {
+                let _ = std::fs::remove_file(&path);
+                skipped_corrupt += 1;
+            }
         }
+    }
+    if skipped_corrupt > 0 {
+        tracing::debug!(skipped_corrupt, "removed corrupt RLM session files");
     }
     Ok(sessions)
 }
@@ -84,4 +103,80 @@ pub fn trim_to_limit(sessions: &mut std::collections::HashMap<String, ScanSessio
         let _ = remove_session_file(&id);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::rlm::session::{Chunk, ScanSession};
+    use crate::test_lock;
+    use tempfile::TempDir;
+
+    fn sample_session(id: &str) -> ScanSession {
+        ScanSession {
+            id: id.into(),
+            root_path: "/tmp".into(),
+            chunks: vec![Chunk {
+                path: "a.txt".into(),
+                offset: 0,
+                line_count: 1,
+                content: "test".into(),
+            }],
+            total_bytes: 4,
+            files_scanned: 1,
+            files_skipped: 0,
+            skip_reasons: std::collections::HashMap::new(),
+            created_at_unix: unix_now(),
+        }
+    }
+
+    #[test]
+    fn atomic_persist_survives_read() {
+        let _guard = test_lock::acquire();
+        let cache = TempDir::new().unwrap();
+        std::env::set_var("CBRLM_CACHE_DIR", cache.path());
+
+        let session = sample_session("atomic-test");
+        persist_session(&session).unwrap();
+        let loaded = load_persisted_sessions().unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].id, "atomic-test");
+
+        std::env::remove_var("CBRLM_CACHE_DIR");
+    }
+
+    #[test]
+    fn corrupt_session_file_is_removed_on_load() {
+        let _guard = test_lock::acquire();
+        let cache = TempDir::new().unwrap();
+        std::env::set_var("CBRLM_CACHE_DIR", cache.path());
+
+        let dir = sessions_dir();
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("bad.json"), "{not valid json").unwrap();
+
+        let loaded = load_persisted_sessions().unwrap();
+        assert!(loaded.is_empty());
+        assert!(!dir.join("bad.json").exists());
+
+        std::env::remove_var("CBRLM_CACHE_DIR");
+    }
+
+    #[test]
+    fn overwrite_replaces_prior_session() {
+        let _guard = test_lock::acquire();
+        let cache = TempDir::new().unwrap();
+        std::env::set_var("CBRLM_CACHE_DIR", cache.path());
+
+        let mut session = sample_session("overwrite");
+        persist_session(&session).unwrap();
+        session.files_scanned = 99;
+        persist_session(&session).unwrap();
+
+        let loaded = load_persisted_sessions().unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].files_scanned, 99);
+
+        std::env::remove_var("CBRLM_CACHE_DIR");
+    }
 }

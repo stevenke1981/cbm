@@ -26,6 +26,9 @@ jobs:
         with:
           workspaces: .
 
+      - name: cargo fmt
+        run: cargo fmt --check
+
       - name: cargo test
         run: cargo test --all-targets
 

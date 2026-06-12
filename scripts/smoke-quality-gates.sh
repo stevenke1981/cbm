@@ -15,6 +15,9 @@ if [[ "${1:-}" == "--skip-build" ]]; then
   SKIP_BUILD=1
 fi
 
+echo "==> cargo fmt --check"
+cargo fmt --check
+
 echo "==> cargo test"
 cargo test
 

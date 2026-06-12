@@ -13,6 +13,10 @@ $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Root = Split-Path -Parent $Root
 Set-Location $Root
 
+Write-Host "==> cargo fmt --check" -ForegroundColor Cyan
+cargo fmt --check
+if ($LASTEXITCODE -ne 0) { throw "cargo fmt --check failed" }
+
 Write-Host "==> cargo test" -ForegroundColor Cyan
 cargo test
 if ($LASTEXITCODE -ne 0) { throw "cargo test failed" }

@@ -4,7 +4,7 @@ Status key: **Done** | **Partial** | **MVP** | **Not started** | **Omitted**
 
 Reference: `knowledge-graph/` (architecture, specifications, functions).
 
-Last updated: 2026-06-12 (Section 6 review applied).
+Last updated: 2026-06-12 (Section 7 review applied).
 
 ## Status model
 
@@ -15,7 +15,7 @@ Last updated: 2026-06-12 (Section 6 review applied).
 | **Done** | Matches reference contract for the supported scope |
 | **Omitted** | Intentionally not implemented in Rust |
 
-**MVP rewrite is complete** (Sections 3–5). **Full reference parity is not.** See [Full parity backlog](#full-parity-backlog) below.
+**Rust MVP rewrite is complete** (Sections 3–7). **Full reference parity is not** — this is not a complete reference replica. FoundationDB is omitted by design. See [Full parity backlog](#full-parity-backlog) below.
 
 ## Core platform
 
@@ -87,6 +87,7 @@ All 11 reference signals contribute to `combined` score. Thresholds: `SIMILAR_TO
 
 | Gate | Status |
 |------|--------|
+| `cargo fmt --check` | Done |
 | `cargo test` green (parallel-safe) | Done — see CI |
 | `cargo clippy --all-targets -- -D warnings` | Done |
 | `cargo build --release` | Done |
@@ -106,6 +107,18 @@ All 11 reference signals contribute to `combined` score. Thresholds: `SIMILAR_TO
 | 6.6 | Smoke `query_graph` edge diversity | Done |
 | 6.7 | `--quiet` + JSON stdout contract | Done |
 | 6.8 | Full parity backlog section | Done |
+
+## Section 7 (Post-MVP hardening)
+
+| # | Item | Status |
+|---|------|--------|
+| 7.1 | Matrix-aware release artifact smoke | Done |
+| 7.2 | `cargo fmt --check` in CI/smoke gates | Done |
+| 7.3 | Process-level CLI JSON tests | Done |
+| 7.4 | Atomic RLM session persistence | Done |
+| 7.5 | Full-pipeline CALLS fixtures | Done |
+| 7.6 | Installer + MCP smoke from release artifact | Done |
+| 7.7 | MVP vs replica project language | Done |
 
 ## Full parity backlog
 
