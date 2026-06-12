@@ -1,10 +1,30 @@
-# CBRLM — Codebase RLM Memory MCP (Rust)
+# CBRLM - Codebase RLM Memory MCP (Rust)
 
-Rust rewrite of `codebase-memory-mcp`: a knowledge-graph indexer and MCP server for AI coding agents (OpenCode, Codex, Claude Code, and others).
+CBRLM is a Rust MCP server and CLI for indexing codebases into a local knowledge graph for AI coding agents. It is designed for OpenCode, Codex, Claude Code, and other MCP-capable developer tools.
 
-Reference docs live in [`../knowledge-graph/`](../knowledge-graph/). Implementation tracking: [`RUST_REWRITE_TODO.md`](RUST_REWRITE_TODO.md). Feature parity status: [`PARITY_MATRIX.md`](PARITY_MATRIX.md).
+This repository is a Rust MVP rewrite of `codebase-memory-mcp`. It is usable for agent workflows today, but it is not a full reference replica. SQLite is the canonical store in this Rust version; FoundationDB is intentionally omitted.
 
-## Quick start
+Reference material: [`../knowledge-graph/`](../knowledge-graph/)
+
+Implementation history: [`RUST_REWRITE_TODO.md`](RUST_REWRITE_TODO.md)
+
+Parity status: [`PARITY_MATRIX.md`](PARITY_MATRIX.md)
+
+## Status Snapshot
+
+| Area | Current state |
+|------|---------------|
+| Rust MVP rewrite | Complete through Sections 3-7 |
+| MCP stdio server | Usable |
+| CLI tool dispatch | Usable with `--json --quiet` |
+| Agent install hooks | OpenCode, Codex, Claude-style configs |
+| Graph store | SQLite + optional `.codebase-memory/graph.db.zst` export |
+| Semantic edges | Optional via `CBRLM_SEMANTIC_ENABLED=1` |
+| Full reference parity | Not complete; see `PARITY_MATRIX.md` backlog |
+
+## For Humans
+
+Use this path when you want to build, install, test, or inspect the tool yourself.
 
 ### Build
 
@@ -13,132 +33,234 @@ cd D:\cbm\cbrlm
 cargo build --release
 ```
 
-Binary: `target/release/cbrlm.exe` (Windows) or `target/release/cbrlm` (Linux/macOS).
+Binary paths:
 
-### CLI output contract
+- Windows: `target\release\cbrlm.exe`
+- Linux/macOS: `target/release/cbrlm`
 
-- `--json` writes machine-readable JSON to **stdout** only.
-- Diagnostics and index progress logs go to **stderr** (normal Unix convention).
-- `--quiet` suppresses tracing logs; use with `--json` in scripts:
+### Run Quality Gates
+
+```powershell
+cargo fmt --check
+cargo test --all-targets
+cargo clippy --all-targets -- -D warnings
+cargo build --release
+.\scripts\smoke-quality-gates.ps1 -SkipBuild
+.\scripts\smoke-release-artifact.ps1 -SkipBuild
+```
+
+Linux/macOS:
+
+```bash
+cargo fmt --check
+cargo test --all-targets
+cargo clippy --all-targets -- -D warnings
+cargo build --release
+./scripts/smoke-quality-gates.sh --skip-build
+```
+
+### Index This Repository
+
+```powershell
+.\target\release\cbrlm.exe cli index_repository --json --quiet '{"repo_path":".","project":"cbrlm-review","mode":"full","persistence":false}'
+```
+
+Project names are stored with a `cbrlm+` prefix. For example, `cbrlm-review` becomes `cbrlm+cbrlm-review`.
+
+### Search The Graph
+
+```powershell
+.\target\release\cbrlm.exe cli search_graph --json --quiet '{"project":"cbrlm-review","query":"handler","limit":10}'
+.\target\release\cbrlm.exe cli search_graph --json --quiet '{"project":"cbrlm-review","relationship":"CALLS","label":"Function"}'
+.\target\release\cbrlm.exe cli trace_path --json --quiet '{"project":"cbrlm-review","function_name":"run_cli","direction":"both","depth":2}'
+```
+
+`name_pattern` and `qn_pattern` use regex. `file_pattern` uses glob. Paginated responses include `has_more`.
+
+### Run MCP Server
+
+```powershell
+.\target\release\cbrlm.exe
+```
+
+With the optional graph UI:
+
+```powershell
+.\target\release\cbrlm.exe --ui --port 9749
+```
+
+### Install Into Agent Config
+
+```powershell
+.\target\release\cbrlm.exe install --yes
+.\target\release\cbrlm.exe install --dry-run --all
+.\target\release\cbrlm.exe uninstall --yes
+```
+
+Platform helper scripts:
+
+- `scripts\install.ps1`
+- `scripts/install.sh`
+
+### Release Packaging
+
+```powershell
+.\scripts\build-release.ps1
+.\scripts\smoke-release-artifact.ps1 -SkipBuild
+```
+
+The release smoke verifies the packaged archive, checksum, extracted binary, CLI indexing, install dry-run, and a minimal MCP `initialize` / `tools/list` round trip.
+
+## For Agents And LLMs
+
+Read this section before changing code. It is written as an operational contract for coding agents.
+
+### What To Believe
+
+- Treat this repo as a Rust MVP rewrite, not a complete reference replica.
+- Do not claim full parity unless the backlog in [`PARITY_MATRIX.md`](PARITY_MATRIX.md#full-parity-backlog) is closed.
+- FoundationDB is omitted by design; do not reintroduce it unless the project direction changes.
+- Regex and heuristic graph passes are useful but still have precision limits.
+
+### Discovery Order
+
+Prefer graph-native discovery over broad text search:
+
+1. `index_repository` to refresh the project graph.
+2. `search_graph` to find symbols, tools, handlers, and modules.
+3. `trace_path` to inspect callers/callees.
+4. `get_code_snippet` or `rlm_read_symbol` to read one target symbol.
+5. `query_graph` for read-only SQL-style graph checks.
+6. Fall back to `rg` for docs, configs, scripts, literal strings, and when graph results are insufficient.
+
+Recommended local index command:
+
+```powershell
+.\target\release\cbrlm.exe cli index_repository --json --quiet '{"repo_path":".","project":"cbrlm-local","mode":"full","persistence":false}'
+```
+
+### Required Verification Before Claiming Done
+
+For most code changes, run:
+
+```powershell
+cargo fmt --check
+cargo test --all-targets
+cargo clippy --all-targets -- -D warnings
+```
+
+For graph, CLI, packaging, install, release, or MCP changes, also run:
+
+```powershell
+cargo build --release
+.\scripts\smoke-quality-gates.ps1 -SkipBuild
+.\scripts\smoke-release-artifact.ps1 -SkipBuild
+```
+
+For Linux/macOS-only edits, use the `.sh` smoke script where appropriate.
+
+### Common Task Map
+
+| Task | Start here |
+|------|------------|
+| MCP tool behavior | `src/mcp/tools.rs`, `src/mcp/server.rs` |
+| CLI flags/output | `src/main.rs`, `src/cli/mod.rs`, `tests/cli_process_test.rs` |
+| Index pipeline | `src/pipeline/` |
+| CALLS precision | `src/pipeline/calls.rs`, `src/pipeline/calls_ast.rs`, `tests/calls_*_test.rs` |
+| RLM scan/chunk | `src/rlm/`, especially `session.rs` and `persistence.rs` |
+| Store/query behavior | `src/store/` |
+| Semantic edges | `src/semantic/` |
+| Installer behavior | `src/install/mod.rs`, `scripts/install.*`, `packaging/` |
+| Release smoke | `scripts/smoke-release-artifact.ps1`, `.github/workflows/release.yml` |
+
+### Safe Commit Rules
+
+- Do not commit `target/`, `dist/`, cache directories, or local temp files.
+- Keep docs honest about MVP vs full reference parity.
+- If you change README claims, update `PARITY_MATRIX.md` or `RUST_REWRITE_TODO.md` when the claim affects parity/status.
+- If you add a new supported behavior, add a regression test or smoke gate near the behavior.
+
+## CLI Output Contract
+
+- `--json` writes machine-readable JSON to stdout.
+- Diagnostics and index progress logs go to stderr.
+- `--quiet` suppresses tracing logs and is recommended for scripts.
 
 ```powershell
 cbrlm cli index_repository --json --quiet '{"repo_path":".","project":"x","mode":"fast"}' 2>$null
 ```
 
-`rlm_scan` sessions persist under `%LOCALAPPDATA%\codebase-memory-mcp\rlm-sessions` (or `CBRLM_CACHE_DIR`), so `rlm_chunk` works across separate CLI invocations (1h TTL).
+`rlm_scan` sessions persist under `%LOCALAPPDATA%\codebase-memory-mcp\rlm-sessions` or `CBRLM_CACHE_DIR`, so `rlm_chunk` works across separate CLI invocations.
 
-### Test & lint (Section 4 quality gates)
-
-```powershell
-cargo fmt --check
-cargo test
-cargo clippy --all-targets -- -D warnings
-cargo build --release
-```
-
-Run `cargo fmt` before committing — CI enforces `cargo fmt --check`.
-
-One-shot gates + smoke checks:
-
-```powershell
-.\scripts\smoke-quality-gates.ps1
-# Linux/macOS:
-./scripts/smoke-quality-gates.sh
-```
-
-### Index a repository
-
-```powershell
-cargo run -- cli index_repository --json '{"repo_path":".","project":"my-app","mode":"full","persistence":false}'
-```
-
-Projects are stored as `cbrlm+<name>` in the cache directory (default: `%LOCALAPPDATA%\codebase-memory-mcp` on Windows).
-
-### Search the graph
-
-```powershell
-cargo run -- cli search_graph --json '{"project":"my-app","query":"handler","limit":10}'
-cargo run -- cli search_graph --json '{"project":"my-app","relationship":"CALLS","label":"Function"}'
-cargo run -- cli search_graph --json '{"project":"my-app","name_pattern":".*Handler.*"}'
-```
-
-`name_pattern` and `qn_pattern` use **regex**. `file_pattern` uses **glob**. Responses include `has_more` for pagination.
-
-### MCP server (stdio)
-
-```powershell
-cargo run --
-# or with graph UI:
-cargo run -- --ui --port 9749
-```
-
-### Install into agent config
-
-```powershell
-cargo run -- install --yes
-cargo run -- install --dry-run --all
-cargo run -- uninstall --yes
-```
-
-Platform scripts: `scripts/install.ps1`, `scripts/install.sh`.
-
-### Release build
-
-```powershell
-.\scripts\build-release.ps1
-# Linux/macOS:
-./scripts/build-release.sh
-```
-
-GitHub Actions: `.github/workflows/ci.yml` (test + clippy + release smoke), `.github/workflows/release.yml` (multi-platform binaries).
-
-## Environment variables
+## Environment Variables
 
 | Variable | Purpose |
 |----------|---------|
-| `CBRLM_CACHE_DIR` | Override SQLite cache location |
-| `CBRLM_SEMANTIC_ENABLED=1` | Enable TF-IDF + RI semantic pass |
+| `CBRLM_CACHE_DIR` | Override SQLite/cache location |
+| `CBRLM_SEMANTIC_ENABLED=1` | Enable semantic vector pass and semantic edges |
 | `CBRLM_PERSISTENCE=1` | Export/import `.codebase-memory/graph.db.zst` |
 | `CBRLM_WATCHER=0` | Disable background reindex watcher |
 | `CBRLM_UI=1` | Enable HTTP graph UI |
-| `CBRLM_PORT` | HTTP UI port (default 9749) |
+| `CBRLM_PORT` | HTTP UI port, default `9749` |
 | `CBRLM_PROFILE=1` | Log per-phase index timings |
-| `CBRLM_MEMORY_BUDGET_MB` | Max bytes reserved during file indexing (default 512) |
+| `CBRLM_MEMORY_BUDGET_MB` | Max memory budget for file indexing, default `512` |
 
-## MCP tools (summary)
+## MCP Tools
 
-| Tool | Status |
-|------|--------|
-| `index_repository` | Full / moderate / fast modes, incremental |
-| `search_graph` | Regex patterns, relationship/degree filters, vector query |
-| `trace_path` | BFS over call graph |
-| `get_code_snippet` | Symbol source |
-| `get_graph_schema` | Labels + implemented edge types |
-| `get_architecture` | Counts and top symbols |
-| `query_graph` | Read-only SELECT |
-| `search_code` | Full-text file search |
-| `rlm_*` | RLM map-reduce workflow helpers |
+| Tool | Purpose |
+|------|---------|
+| `index_repository` | Build or refresh a project graph |
+| `index_status` | Check indexed state |
+| `search_graph` / `rlm_filter` | Search symbols with regex, glob, relationship, degree, pagination |
+| `trace_path` | Trace call paths inbound/outbound/both |
+| `get_code_snippet` / `rlm_read_symbol` | Read source for one symbol |
+| `query_graph` | Read-only `SELECT` queries |
+| `get_graph_schema` | Labels, edge types, schema summary |
+| `get_architecture` | Counts, top symbols, communities |
+| `search_code` | Literal code search inside indexed files |
+| `rlm_scan` / `rlm_chunk` / `rlm_peek` | Chunk large non-code blobs/logs for RLM workflows |
+| `detect_changes` | Git-aware change summary |
+| `manage_adr` | Store architecture decision notes |
+| `ingest_traces` | Add runtime trace edges |
 
-See [`PARITY_MATRIX.md`](PARITY_MATRIX.md) for detailed parity vs the reference system.
+## Graph Model
 
-## Graph model (current)
+- Qualified name format: `{file}::{label}::{name}@L{line}`
+- Structure nodes: `Project`, `Folder`, `File`
+- Core edges: `CONTAINS`, `IMPORTS`, `CALLS`, `INHERITS`, `IMPLEMENTS`, `DECORATES`, `HTTP_ROUTE`
+- Optional edges: `SIMILAR_TO`, `SEMANTICALLY_RELATED`, `RUNTIME_TRACE`
+- Not emitted yet: `HTTP_CALLS`
 
-- **QN format**: `{file}::{label}::{name}@L{line}`
-- **Emitted edges**: `CONTAINS`, `IMPORTS`, `CALLS`, `INHERITS`, `IMPLEMENTS`, `DECORATES`, optional `SIMILAR_TO` / `SEMANTICALLY_RELATED`, `RUNTIME_TRACE` via `ingest_traces`
-- **Structure nodes**: `Project`, `Folder`, `File`
+## Project Layout
 
-## Project layout
-
-```
+```text
 src/
-  pipeline/     Index passes (discover, extract, structure, imports, calls)
-  store/        SQLite graph store + search
-  mcp/          JSON-RPC MCP server
-  semantic/     Multi-signal similarity (TF-IDF, RI, MinHash, API sig, module, Halstead)
-  rlm/          RLM scan/chunk/session workflow
-  http/         Optional 3D graph UI
+  pipeline/     Index passes: discover, extract, structure, imports, calls, routes
+  store/        SQLite graph store, search, schema, query helpers
+  mcp/          JSON-RPC MCP server and tool dispatch
+  semantic/     Multi-signal similarity and vector scoring
+  rlm/          RLM scan/chunk/session workflow and persistence
+  http/         Optional graph UI
+  install/      Agent config installation and uninstall
+tests/          Integration, CLI process, CALLS precision, hook tests
+scripts/        Build, install, package, and smoke scripts
+packaging/      Deferred package manager metadata and installers
 ```
 
-## Contributing / next work
+## Next Work
 
-**Rust MVP rewrite complete** (Sections 3–7). This is **not** a full reference replica — FoundationDB is omitted by design and SQLite is canonical. **Full reference parity backlog remains** — see [Full parity backlog](PARITY_MATRIX.md#full-parity-backlog) in `PARITY_MATRIX.md`. Run `.\scripts\smoke-quality-gates.ps1` and `.\scripts\smoke-release-artifact.ps1` before release milestones.
+The main project contract is now: keep the Rust MVP stable while closing full-parity gaps deliberately.
+
+Start with:
+
+1. [`PARITY_MATRIX.md`](PARITY_MATRIX.md) for current claims and blockers.
+2. [`RUST_REWRITE_TODO.md`](RUST_REWRITE_TODO.md) for historical implementation slices.
+3. `tests/calls_pipeline_test.rs` and `tests/cli_process_test.rs` before changing graph precision or CLI behavior.
+
+High-value backlog areas:
+
+- Leiden/Louvain-grade communities.
+- `HTTP_CALLS` client-edge pass.
+- Store bulk transaction API and rollback tests.
+- Multi-language AST-aware CALLS beyond Rust.
+- Reference-grade semantic tuning.
