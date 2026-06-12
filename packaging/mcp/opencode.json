@@ -3,10 +3,7 @@
     "codebase-memory-mcp": {
       "type": "local",
       "command": [
-        "pwsh",
-        "-NoProfile",
-        "-Command",
-        "& \"{{CBRLM_BINARY}}\""
+        "{{CBRLM_BINARY}}"
       ],
       "enabled": true,
       "timeout": 120000,

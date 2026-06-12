@@ -45,7 +45,7 @@ Unix example:
 /home/you/.config/cbrlm/bin/cbrlm
 ```
 
-`opencode.json` uses the Windows PowerShell command shape. On Unix, replace the `command` array with `["{{CBRLM_BINARY}}"]`.
+`opencode.json` uses a direct command array. If your OpenCode setup keeps the server under an existing `cbm` key, update that key's `command` value instead of adding a second server.
 
 ## Required environment
 

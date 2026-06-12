@@ -98,6 +98,20 @@ With the optional graph UI:
 .\target\release\cbrlm.exe uninstall --yes
 ```
 
+Default install copies the current binary into a stable per-user location first:
+
+```text
+%USERPROFILE%\.config\cbrlm\bin\cbrlm.exe
+```
+
+Agent configs should point at that stable binary, not at a git clone's `target\release` path. This matters because `cargo clean`, deleting the clone, or rebuilding elsewhere can invalidate `target\release\cbrlm.exe`.
+
+OpenCode notes:
+
+- Existing `.config\opencode\opencode.jsonc` and `.config\opencode\opencode.json` files are detected even when the current shell cannot identify itself as OpenCode.
+- Existing `mcp.cbm` entries are updated in place to the stable binary path.
+- New OpenCode configs use the MCP server name `codebase-memory-mcp`.
+
 Platform helper scripts:
 
 - `scripts\install.ps1`

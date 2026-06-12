@@ -237,6 +237,7 @@ struct AgentTarget {
     kind: AgentKind,
     config_path: &'static str,
     format: ConfigFormat,
+    create_if_missing: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -269,33 +270,45 @@ fn all_targets() -> Vec<AgentTarget> {
     vec![
         AgentTarget {
             kind: AgentKind::OpenCode,
+            config_path: ".config/opencode/opencode.jsonc",
+            format: ConfigFormat::OpenCode,
+            create_if_missing: true,
+        },
+        AgentTarget {
+            kind: AgentKind::OpenCode,
             config_path: ".config/opencode/opencode.json",
             format: ConfigFormat::OpenCode,
+            create_if_missing: false,
         },
         AgentTarget {
             kind: AgentKind::Codex,
             config_path: ".codex/config.toml",
             format: ConfigFormat::CodexToml,
+            create_if_missing: true,
         },
         AgentTarget {
             kind: AgentKind::ClaudeCode,
             config_path: ".claude/settings.json",
             format: ConfigFormat::McpServersJson,
+            create_if_missing: true,
         },
         AgentTarget {
             kind: AgentKind::GeminiCli,
             config_path: ".gemini/settings.json",
             format: ConfigFormat::McpServersJson,
+            create_if_missing: true,
         },
         AgentTarget {
             kind: AgentKind::Zed,
             config_path: ".config/zed/settings.json",
             format: ConfigFormat::McpServersJson,
+            create_if_missing: true,
         },
         AgentTarget {
             kind: AgentKind::Unknown,
             config_path: ".config/cbrlm/mcp.json",
             format: ConfigFormat::FallbackJson,
+            create_if_missing: true,
         },
     ]
 }
@@ -307,7 +320,11 @@ fn select_targets(all_agents: bool) -> Vec<AgentTarget> {
     let detected = AgentKind::detect();
     all_targets()
         .into_iter()
-        .filter(|t| t.kind == detected || t.kind == AgentKind::Unknown)
+        .filter(|t| {
+            t.kind == detected
+                || t.kind == AgentKind::Unknown
+                || t.path().is_some_and(|path| path.exists())
+        })
         .collect()
 }
 
@@ -315,6 +332,10 @@ fn configure_agent(target: &AgentTarget, binary: &Path, opts: &InstallOptions) -
     let path = target
         .path()
         .ok_or_else(|| Error::Other("home directory not found".into()))?;
+
+    if !path.exists() && !target.create_if_missing {
+        return Ok(false);
+    }
 
     if !path.exists() && !opts.force {
         if opts.dry_run {
@@ -328,10 +349,6 @@ fn configure_agent(target: &AgentTarget, binary: &Path, opts: &InstallOptions) -
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
-    }
-
-    if path.exists() && !opts.force && already_configured(&path, target.format)? {
-        return Ok(false);
     }
 
     if !opts.yes
@@ -372,30 +389,6 @@ fn confirm(prompt: &str) -> Result<bool> {
     Ok(matches!(line.trim().to_lowercase().as_str(), "y" | "yes"))
 }
 
-fn already_configured(path: &Path, format: ConfigFormat) -> Result<bool> {
-    let content = fs::read_to_string(path)?;
-    Ok(match format {
-        ConfigFormat::CodexToml => content.contains(&format!("[mcp_servers.{MCP_SERVER_NAME}]")),
-        _ => {
-            let value: Value = serde_json::from_str(&content)?;
-            json_has_server(&value, format)
-        }
-    })
-}
-
-fn json_has_server(value: &Value, format: ConfigFormat) -> bool {
-    let key = match format {
-        ConfigFormat::OpenCode => "mcp",
-        ConfigFormat::McpServersJson => "mcpServers",
-        ConfigFormat::FallbackJson => "mcpServers",
-        ConfigFormat::CodexToml => return false,
-    };
-    value
-        .get(key)
-        .and_then(|v| v.get(MCP_SERVER_NAME))
-        .is_some()
-}
-
 fn mcp_env(agent: AgentKind) -> Map<String, Value> {
     let mut env = Map::new();
     env.insert("CBRLM_PROJECT_PREFIX".into(), json!("cbrlm+"));
@@ -404,21 +397,12 @@ fn mcp_env(agent: AgentKind) -> Map<String, Value> {
 }
 
 fn opencode_command(binary: &Path) -> Vec<Value> {
-    if cfg!(windows) {
-        vec![
-            json!("pwsh"),
-            json!("-NoProfile"),
-            json!("-Command"),
-            json!(format!("& \"{}\"", binary.display())),
-        ]
-    } else {
-        vec![json!(binary.to_string_lossy().to_string())]
-    }
+    vec![json!(binary.to_string_lossy().to_string())]
 }
 
 fn write_opencode_config(path: &Path, binary: &Path, agent: AgentKind) -> Result<bool> {
     let mut root: Map<String, Value> = if path.exists() {
-        serde_json::from_str(&fs::read_to_string(path)?)?
+        parse_json_config(&fs::read_to_string(path)?)?
     } else {
         Map::new()
     };
@@ -428,8 +412,16 @@ fn write_opencode_config(path: &Path, binary: &Path, agent: AgentKind) -> Result
         .as_object_mut()
         .ok_or_else(|| Error::Other("opencode mcp field is not an object".into()))?;
 
+    let key = if mcp.contains_key(MCP_SERVER_NAME) {
+        MCP_SERVER_NAME
+    } else if mcp.contains_key("cbm") {
+        "cbm"
+    } else {
+        MCP_SERVER_NAME
+    };
+
     mcp.insert(
-        MCP_SERVER_NAME.into(),
+        key.into(),
         json!({
             "type": "local",
             "command": opencode_command(binary),
@@ -444,7 +436,7 @@ fn write_opencode_config(path: &Path, binary: &Path, agent: AgentKind) -> Result
 
 fn write_mcp_servers_json(path: &Path, binary: &Path, agent: AgentKind) -> Result<bool> {
     let mut root: Map<String, Value> = if path.exists() {
-        serde_json::from_str(&fs::read_to_string(path)?)?
+        parse_json_config(&fs::read_to_string(path)?)?
     } else {
         Map::new()
     };
@@ -803,11 +795,15 @@ fn remove_agent_config(path: &Path, format: ConfigFormat) -> Result<bool> {
             Ok(true)
         }
         ConfigFormat::OpenCode => {
-            let mut root: Map<String, Value> = serde_json::from_str(&fs::read_to_string(path)?)?;
+            let mut root: Map<String, Value> = parse_json_config(&fs::read_to_string(path)?)?;
             let removed = root
                 .get_mut("mcp")
                 .and_then(|v| v.as_object_mut())
-                .map(|mcp| mcp.remove(MCP_SERVER_NAME).is_some())
+                .map(|mcp| {
+                    let primary = mcp.remove(MCP_SERVER_NAME).is_some();
+                    let alias = mcp.remove("cbm").is_some();
+                    primary || alias
+                })
                 .unwrap_or(false);
             if removed {
                 write_json_pretty(path, &Value::Object(root))?;
@@ -815,11 +811,15 @@ fn remove_agent_config(path: &Path, format: ConfigFormat) -> Result<bool> {
             Ok(removed)
         }
         ConfigFormat::McpServersJson | ConfigFormat::FallbackJson => {
-            let mut root: Map<String, Value> = serde_json::from_str(&fs::read_to_string(path)?)?;
+            let mut root: Map<String, Value> = parse_json_config(&fs::read_to_string(path)?)?;
             let removed = root
                 .get_mut("mcpServers")
                 .and_then(|v| v.as_object_mut())
-                .map(|mcp| mcp.remove(MCP_SERVER_NAME).is_some())
+                .map(|mcp| {
+                    let primary = mcp.remove(MCP_SERVER_NAME).is_some();
+                    let alias = mcp.remove("cbm").is_some();
+                    primary || alias
+                })
                 .unwrap_or(false);
             if removed {
                 write_json_pretty(path, &Value::Object(root))?;
@@ -827,6 +827,117 @@ fn remove_agent_config(path: &Path, format: ConfigFormat) -> Result<bool> {
             Ok(removed)
         }
     }
+}
+
+fn parse_json_config(content: &str) -> Result<Map<String, Value>> {
+    match serde_json::from_str::<Value>(content) {
+        Ok(Value::Object(root)) => Ok(root),
+        Ok(_) => Err(Error::Other("config root is not an object".into())),
+        Err(first) => match serde_json::from_str::<Value>(&normalize_jsonc(content)) {
+            Ok(Value::Object(root)) => Ok(root),
+            Ok(_) => Err(Error::Other("config root is not an object".into())),
+            Err(_) => Err(first.into()),
+        },
+    }
+}
+
+fn normalize_jsonc(content: &str) -> String {
+    strip_trailing_json_commas(&strip_json_comments(content))
+}
+
+fn strip_json_comments(content: &str) -> String {
+    let mut out = String::with_capacity(content.len());
+    let mut chars = content.chars().peekable();
+    let mut in_string = false;
+    let mut escaped = false;
+    while let Some(ch) = chars.next() {
+        if in_string {
+            out.push(ch);
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+
+        if ch == '"' {
+            in_string = true;
+            out.push(ch);
+            continue;
+        }
+
+        if ch == '/' {
+            match chars.peek().copied() {
+                Some('/') => {
+                    chars.next();
+                    for next in chars.by_ref() {
+                        if next == '\n' {
+                            out.push('\n');
+                            break;
+                        }
+                    }
+                    continue;
+                }
+                Some('*') => {
+                    chars.next();
+                    let mut prev = '\0';
+                    for next in chars.by_ref() {
+                        if prev == '*' && next == '/' {
+                            break;
+                        }
+                        prev = next;
+                    }
+                    continue;
+                }
+                _ => {}
+            }
+        }
+
+        out.push(ch);
+    }
+    out
+}
+
+fn strip_trailing_json_commas(content: &str) -> String {
+    let mut out = String::with_capacity(content.len());
+    let mut chars = content.chars().peekable();
+    let mut in_string = false;
+    let mut escaped = false;
+    while let Some(ch) = chars.next() {
+        if in_string {
+            out.push(ch);
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+
+        if ch == '"' {
+            in_string = true;
+            out.push(ch);
+            continue;
+        }
+
+        if ch == ',' {
+            let mut lookahead = chars.clone();
+            while matches!(lookahead.peek(), Some(c) if c.is_whitespace()) {
+                lookahead.next();
+            }
+            if matches!(lookahead.peek(), Some('}' | ']')) {
+                continue;
+            }
+        }
+
+        out.push(ch);
+    }
+    out
 }
 
 fn write_json_pretty(path: &Path, value: &Value) -> Result<bool> {
@@ -846,7 +957,7 @@ mod tests {
     #[test]
     fn merges_opencode_mcp_entry() {
         let dir = TempDir::new().unwrap();
-        let cfg = dir.path().join("opencode.json");
+        let cfg = dir.path().join("opencode.jsonc");
         fs::write(&cfg, r#"{"model":"test"}"#).unwrap();
         let bin = dir.path().join("cbrlm.exe");
         fs::write(&bin, b"").unwrap();
@@ -855,6 +966,43 @@ mod tests {
         let parsed: Value = serde_json::from_str(&fs::read_to_string(&cfg).unwrap()).unwrap();
         assert!(parsed["mcp"][MCP_SERVER_NAME]["enabled"].as_bool().unwrap());
         assert_eq!(parsed["model"], "test");
+    }
+
+    #[test]
+    fn updates_existing_opencode_cbm_alias_from_jsonc() {
+        let dir = TempDir::new().unwrap();
+        let cfg = dir.path().join("opencode.jsonc");
+        fs::write(
+            &cfg,
+            r#"{
+  // OpenCode accepts jsonc; keep parsing tolerant.
+  "mcp": {
+    "cbm": {
+      "type": "local",
+      "command": ["C:\\repo\\target\\release\\cbrlm.exe"],
+      "enabled": true,
+      "timeout": 120000
+    }
+  },
+}"#,
+        )
+        .unwrap();
+        let bin = dir.path().join("stable").join("cbrlm.exe");
+        fs::create_dir_all(bin.parent().unwrap()).unwrap();
+        fs::write(&bin, b"").unwrap();
+
+        write_opencode_config(&cfg, &bin, AgentKind::OpenCode).unwrap();
+        let parsed: Value = serde_json::from_str(&fs::read_to_string(&cfg).unwrap()).unwrap();
+        assert!(parsed["mcp"]["cbm"].is_object());
+        assert!(parsed["mcp"].get(MCP_SERVER_NAME).is_none());
+        assert_eq!(
+            parsed["mcp"]["cbm"]["command"][0].as_str(),
+            Some(bin.to_string_lossy().as_ref())
+        );
+        assert_eq!(
+            parsed["mcp"]["cbm"]["environment"]["CBRLM_AGENT"].as_str(),
+            Some("opencode")
+        );
     }
 
     #[test]
