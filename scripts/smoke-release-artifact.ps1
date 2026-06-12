@@ -66,11 +66,6 @@ Expand-Archive -Path $Zip -DestinationPath $Extract -Force
 $Extracted = Join-Path $Extract "cbrlm.exe"
 if (-not (Test-Path $Extracted)) { throw "extracted binary missing" }
 
-function Format-McpFrame([string]$Body) {
-    $len = [System.Text.Encoding]::UTF8.GetByteCount($Body)
-    return "Content-Length: $len`r`n`r`n$Body"
-}
-
 function Read-McpLine([System.IO.Stream]$Stream) {
     $bytes = New-Object System.Collections.Generic.List[byte]
     while ($true) {
@@ -81,26 +76,6 @@ function Read-McpLine([System.IO.Stream]$Stream) {
     }
     if ($bytes.Count -eq 0) { return "" }
     return [System.Text.Encoding]::UTF8.GetString($bytes.ToArray())
-}
-
-function Read-McpFrame([System.IO.Stream]$Stream) {
-    $len = 0
-    while ($true) {
-        $line = Read-McpLine $Stream
-        if ($null -eq $line -or $line -eq "") { break }
-        if ($line -match '^Content-Length:\s*(\d+)') {
-            $len = [int]$Matches[1]
-        }
-    }
-    if ($len -le 0) { throw "MCP response missing Content-Length header" }
-    $buf = New-Object byte[] $len
-    $read = 0
-    while ($read -lt $len) {
-        $n = $Stream.Read($buf, $read, $len - $read)
-        if ($n -le 0) { throw "unexpected EOF reading MCP body (read $read of $len)" }
-        $read += $n
-    }
-    return [System.Text.Encoding]::UTF8.GetString($buf)
 }
 
 function Invoke-McpSmoke([string]$Binary) {
@@ -115,15 +90,15 @@ function Invoke-McpSmoke([string]$Binary) {
 
     try {
         $init = '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"smoke","version":"1"}}}'
-        $proc.StandardInput.Write((Format-McpFrame $init))
+        $proc.StandardInput.WriteLine($init)
         $proc.StandardInput.Flush()
-        $initResp = Read-McpFrame $proc.StandardOutput.BaseStream
+        $initResp = Read-McpLine $proc.StandardOutput.BaseStream
         if ($initResp -notmatch '"result"') { throw "MCP initialize failed: $initResp" }
 
         $list = '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
-        $proc.StandardInput.Write((Format-McpFrame $list))
+        $proc.StandardInput.WriteLine($list)
         $proc.StandardInput.Flush()
-        $listResp = Read-McpFrame $proc.StandardOutput.BaseStream
+        $listResp = Read-McpLine $proc.StandardOutput.BaseStream
         if ($listResp -notmatch 'index_repository') { throw "MCP tools/list missing index_repository: $listResp" }
     } finally {
         try { $proc.StandardInput.Close() } catch {}

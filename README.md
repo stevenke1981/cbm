@@ -84,6 +84,9 @@ Project names are stored with a `cbrlm+` prefix. For example, `cbrlm-review` bec
 .\target\release\cbrlm.exe
 ```
 
+The stdio transport follows the MCP specification: one JSON-RPC message per
+line. Legacy `Content-Length` framed clients remain supported for compatibility.
+
 With the optional graph UI:
 
 ```powershell

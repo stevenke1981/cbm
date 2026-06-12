@@ -60,13 +60,13 @@ impl McpServer {
                 self.stop_services();
                 break;
             }
-            let Some(line) = read_stdin_message()? else {
+            let Some(message) = read_stdin_message()? else {
                 self.stop_services();
                 break;
             };
-            let response = self.handle_message(&line)?;
+            let response = self.handle_message(&message.body)?;
             if let Some(body) = response {
-                write_stdout_message(&body)?;
+                write_stdout_message(&body, message.framing)?;
             }
         }
         Ok(())
