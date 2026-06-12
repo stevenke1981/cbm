@@ -56,8 +56,14 @@ mod tests {
 
     #[test]
     fn distinct_paths_with_same_basename_differ() {
-        let a = project_name_from_path(Path::new("D:\\foo\\app"));
-        let b = project_name_from_path(Path::new("D:\\bar\\app"));
+        let base = tempfile::TempDir::new().unwrap();
+        let foo = base.path().join("foo").join("app");
+        let bar = base.path().join("bar").join("app");
+        std::fs::create_dir_all(&foo).unwrap();
+        std::fs::create_dir_all(&bar).unwrap();
+
+        let a = project_name_from_path(&foo);
+        let b = project_name_from_path(&bar);
         assert_ne!(a, b);
         assert!(a.starts_with("cbrlm+app-"));
         assert!(b.starts_with("cbrlm+app-"));
