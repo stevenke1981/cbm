@@ -5,7 +5,10 @@ pub fn qualified_name(file_path: &str, label: &str, name: &str, line_start: i64)
 }
 
 pub fn display_name(qn: &str) -> &str {
-    qn.rsplit("::").next().and_then(|s| s.split('@').next()).unwrap_or(qn)
+    qn.rsplit("::")
+        .next()
+        .and_then(|s| s.split('@').next())
+        .unwrap_or(qn)
 }
 
 #[cfg(test)]

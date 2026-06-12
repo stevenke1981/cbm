@@ -1,7 +1,6 @@
 pub mod agent;
 pub mod cli;
 pub mod discover;
-pub mod symbol_id;
 pub mod error;
 pub mod git;
 pub mod hooks;
@@ -15,6 +14,7 @@ pub mod rlm;
 pub mod runtime;
 pub mod semantic;
 pub mod store;
+pub mod symbol_id;
 pub mod watcher;
 
 pub mod test_lock;

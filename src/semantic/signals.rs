@@ -1,9 +1,9 @@
 //! Modular semantic similarity signals (reference spec slice).
 
-use crate::store::Symbol;
 use super::corpus::Corpus;
 use super::ri::Vector;
 use super::tokenize;
+use crate::store::Symbol;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 
@@ -179,9 +179,7 @@ pub fn score_pair_with_diffusion(
     let tfidf = match (vec_a, vec_b) {
         (Some(va), Some(vb)) => va.tfidf_similarity(vb),
         _ => corpus
-            .map(|c| {
-                Corpus::cosine_sparse(&c.tfidf_vector(&a.tokens), &c.tfidf_vector(&b.tokens))
-            })
+            .map(|c| Corpus::cosine_sparse(&c.tfidf_vector(&a.tokens), &c.tfidf_vector(&b.tokens)))
             .unwrap_or(0.0),
     };
     let ri = match (vec_a, vec_b) {
@@ -197,7 +195,9 @@ pub fn score_pair_with_diffusion(
     let ast_profile = histogram_cosine(&a.ast_histogram, &b.ast_histogram);
     let data_flow = token_jaccard(&a.identifier_tokens, &b.identifier_tokens);
     let graph_diffusion = match (diffusion, idx_a, idx_b) {
-        (Some(ctx), Some(i), Some(j)) => neighbor_jaccard(&ctx.neighbor_sets[i], &ctx.neighbor_sets[j]),
+        (Some(ctx), Some(i), Some(j)) => {
+            neighbor_jaccard(&ctx.neighbor_sets[i], &ctx.neighbor_sets[j])
+        }
         _ => 0.0,
     };
     let combined = combined_score(ScoreBreakdown {
@@ -251,10 +251,7 @@ fn shingles(tokens: &[String], k: usize) -> Vec<String> {
     if tokens.len() < k {
         return vec![tokens.join("_")];
     }
-    tokens
-        .windows(k)
-        .map(|w| w.join("_"))
-        .collect()
+    tokens.windows(k).map(|w| w.join("_")).collect()
 }
 
 fn minhash_sketch(shingles: &[String]) -> [u64; MINHASH_BUCKETS] {
@@ -337,11 +334,7 @@ pub fn module_proximity(path_a: &str, path_b: &str) -> f32 {
     }
     let a: Vec<&str> = path_a.split('/').collect();
     let b: Vec<&str> = path_b.split('/').collect();
-    let common = a
-        .iter()
-        .zip(b.iter())
-        .take_while(|(x, y)| x == y)
-        .count();
+    let common = a.iter().zip(b.iter()).take_while(|(x, y)| x == y).count();
     if common == 0 {
         return 0.0;
     }
@@ -352,7 +345,12 @@ pub fn module_proximity(path_a: &str, path_b: &str) -> f32 {
 fn halstead_metrics(sig: &str) -> HalsteadMetrics {
     let operators = sig
         .chars()
-        .filter(|c| matches!(c, '(' | ')' | '{' | '}' | '[' | ']' | ';' | ',' | ':' | '<' | '>'))
+        .filter(|c| {
+            matches!(
+                c,
+                '(' | ')' | '{' | '}' | '[' | ']' | ';' | ',' | ':' | '<' | '>'
+            )
+        })
         .count();
     let operands = tokenize(sig).len();
     HalsteadMetrics {
@@ -366,7 +364,9 @@ fn type_signature_tokens(sig: &str) -> Vec<String> {
     for part in sig.split(|c: char| !c.is_alphanumeric() && c != '_') {
         let p = part.trim();
         if p.len() >= 2
-            && p.chars().next().is_some_and(|c| c.is_uppercase() || c == '&')
+            && p.chars()
+                .next()
+                .is_some_and(|c| c.is_uppercase() || c == '&')
             && !matches!(p, "Self" | "String" | "Vec" | "Option" | "Result")
         {
             out.push(p.to_ascii_lowercase());
@@ -390,7 +390,9 @@ fn decorator_tokens(sig: &str) -> Vec<String> {
 }
 
 fn ast_histogram(sig: &str, name: &str) -> [f32; 4] {
-    let kw = ["fn", "def", "class", "impl", "async", "pub", "return", "if", "for"];
+    let kw = [
+        "fn", "def", "class", "impl", "async", "pub", "return", "if", "for",
+    ];
     let mut counts = [0f32; 4];
     for token in tokenize(sig).iter().chain(tokenize(name).iter()) {
         if kw.contains(&token.as_str()) {

@@ -65,8 +65,19 @@ fn resolve_calls_inner(
                     if callee_name == sym.name
                         || matches!(
                             callee_name,
-                            "if" | "for" | "while" | "match" | "return" | "let" | "const" | "var"
-                                | "new" | "self" | "super" | "print" | "println" | "format"
+                            "if" | "for"
+                                | "while"
+                                | "match"
+                                | "return"
+                                | "let"
+                                | "const"
+                                | "var"
+                                | "new"
+                                | "self"
+                                | "super"
+                                | "print"
+                                | "println"
+                                | "format"
                         )
                     {
                         continue;
@@ -82,7 +93,9 @@ fn resolve_calls_inner(
                                 src_qn: key.0,
                                 dst_qn: key.1,
                                 edge_type: "CALLS".into(),
-                                properties_json: Some(r#"{"confidence":"resolved"}"#.into()),
+                                properties_json: Some(
+                                    r#"{"confidence":"resolved","method":"regex"}"#.into(),
+                                ),
                             });
                         }
                     }
@@ -193,6 +206,9 @@ mod tests {
         let src = "fn main() { helper(); }\n";
         let registry = build_name_registry(&symbols);
         let edges = resolve_calls_with_registry(&symbols[..1], src, "rust", &registry);
-        assert!(edges.is_empty(), "ambiguous cross-file callee should not link");
+        assert!(
+            edges.is_empty(),
+            "ambiguous cross-file callee should not link"
+        );
     }
 }

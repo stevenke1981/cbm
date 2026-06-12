@@ -28,15 +28,14 @@ pub fn extract_http_routes(
             r#"(?m)\.(get|post|put|delete|patch)\(\s*["']([^"']+)["']"#,
             "express",
         )],
-        "rust" => &[(
-            r#"\.route\(\s*["']([^"']+)["']"#,
-            "axum",
-        )],
+        "rust" => &[(r#"\.route\(\s*["']([^"']+)["']"#, "axum")],
         _ => &[],
     };
 
     for (pattern, framework) in patterns {
-        let Ok(re) = Regex::new(pattern) else { continue };
+        let Ok(re) = Regex::new(pattern) else {
+            continue;
+        };
         for cap in re.captures_iter(content) {
             let path = match *framework {
                 "decorator" | "express" => cap.get(2).map(|m| m.as_str()),
@@ -49,11 +48,7 @@ pub fn extract_http_routes(
                 continue;
             };
             let dst = format!("{file_path}::Route::{route_path}@L{line}");
-            let key = (
-                handler.clone(),
-                dst.clone(),
-                "HTTP_ROUTE".to_string(),
-            );
+            let key = (handler.clone(), dst.clone(), "HTTP_ROUTE".to_string());
             if seen.insert(key) {
                 edges.push(Edge {
                     src_qn: handler,
@@ -93,10 +88,7 @@ fn handler_after_line(symbols: &[Symbol], file_path: &str, line: i64) -> Option<
 }
 
 fn line_number(content: &str, byte_offset: usize) -> i64 {
-    content[..byte_offset.min(content.len())]
-        .lines()
-        .count() as i64
-        + 1
+    content[..byte_offset.min(content.len())].lines().count() as i64 + 1
 }
 
 #[cfg(test)]

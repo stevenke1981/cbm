@@ -75,10 +75,7 @@ impl McpServer {
     pub fn handle_message(&self, raw: &str) -> Result<Option<String>> {
         let request: Value = serde_json::from_str(raw)?;
         let id = request.get("id").cloned();
-        let method = request
-            .get("method")
-            .and_then(|m| m.as_str())
-            .unwrap_or("");
+        let method = request.get("method").and_then(|m| m.as_str()).unwrap_or("");
 
         let result = match method {
             "initialize" => Ok(self.handle_initialize(&request)),

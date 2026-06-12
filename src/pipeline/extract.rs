@@ -152,7 +152,9 @@ fn extract_signature(content: &str, start_row: usize, end_row: usize) -> String 
         return first.chars().take(200).collect();
     }
     let mut sig = first.to_string();
-    let end = end_row.min(start_row + 5).min(lines.len().saturating_sub(1));
+    let end = end_row
+        .min(start_row + 5)
+        .min(lines.len().saturating_sub(1));
     for line in lines.iter().take(end + 1).skip(start_row + 1) {
         sig.push(' ');
         sig.push_str(line.trim());
@@ -169,10 +171,19 @@ fn language_looks_complete(sig: &str) -> bool {
 
 fn label_for_kind(kind: &str) -> Option<&'static str> {
     Some(match kind {
-        "function_item" | "function_definition" | "function_declaration"
-        | "method_declaration" | "method_definition" => "Function",
-        "struct_item" | "struct_specifier" | "class_specifier" | "class_definition"
-        | "class_declaration" | "enum_item" | "trait_item" | "impl_item"
+        "function_item"
+        | "function_definition"
+        | "function_declaration"
+        | "method_declaration"
+        | "method_definition" => "Function",
+        "struct_item"
+        | "struct_specifier"
+        | "class_specifier"
+        | "class_definition"
+        | "class_declaration"
+        | "enum_item"
+        | "trait_item"
+        | "impl_item"
         | "interface_declaration" => "Class",
         _ => return None,
     })
@@ -196,14 +207,23 @@ fn extract_symbols_regex(file_path: &str, language: &str, content: &str) -> Vec<
             (r"(?m)^type\s+(\w+)\s+struct", "Class"),
         ],
         "java" => &[
-            (r"(?m)^\s*(?:public|private|protected)?\s+\w[\w<>,\s]*\s+(\w+)\s*\(", "Function"),
+            (
+                r"(?m)^\s*(?:public|private|protected)?\s+\w[\w<>,\s]*\s+(\w+)\s*\(",
+                "Function",
+            ),
             (r"(?m)^\s*(?:public|private)?\s*class\s+(\w+)", "Class"),
             (r"(?m)^\s*(?:public|private)?\s*interface\s+(\w+)", "Class"),
         ],
         "javascript" | "typescript" | "jsx" | "tsx" => &[
-            (r"(?m)^\s*(?:export\s+)?(?:async\s+)?function\s+(\w+)", "Function"),
+            (
+                r"(?m)^\s*(?:export\s+)?(?:async\s+)?function\s+(\w+)",
+                "Function",
+            ),
             (r"(?m)^\s*(?:export\s+)?class\s+(\w+)", "Class"),
-            (r"(?m)^\s*(?:export\s+)?const\s+(\w+)\s*=\s*(?:async\s+)?\(", "Function"),
+            (
+                r"(?m)^\s*(?:export\s+)?const\s+(\w+)\s*=\s*(?:async\s+)?\(",
+                "Function",
+            ),
         ],
         _ => &[(r"(?m)^\s*(?:fn|def|func)\s+(\w+)", "Function")],
     };
@@ -214,10 +234,7 @@ fn extract_symbols_regex(file_path: &str, language: &str, content: &str) -> Vec<
             for cap in re.captures_iter(content) {
                 if let Some(name) = cap.get(1) {
                     let name = name.as_str().to_string();
-                    let line = content[..cap.get(0).unwrap().start()]
-                        .lines()
-                        .count() as i64
-                        + 1;
+                    let line = content[..cap.get(0).unwrap().start()].lines().count() as i64 + 1;
                     symbols.push(Symbol {
                         qualified_name: qualified_name(file_path, label, &name, line),
                         name,

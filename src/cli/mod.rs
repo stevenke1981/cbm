@@ -1,8 +1,8 @@
 use crate::agent::AgentKind;
 use crate::error::Result;
+use crate::http::{HttpServer, UiConfig};
 use crate::install::{self, InstallOptions, UninstallOptions};
 use crate::mcp::{tool_definitions, ToolHandler};
-use crate::http::{HttpServer, UiConfig};
 use crate::mcp::{McpServer, SERVER_NAME, SERVER_VERSION};
 use crate::rlm::RlmEngine;
 use serde_json::Value;
@@ -16,7 +16,11 @@ USAGE:
     cbrlm                          Run MCP server (stdio JSON-RPC)
     cbrlm [--ui] [--port=9749]         MCP server + optional graph UI
     cbrlm ui [--port=9749]             Graph UI only
-    cbrlm cli [--json] <tool> [args_json]
+    cbrlm cli [--json] [--quiet] <tool> [args_json]
+
+CLI OUTPUT:
+    --json     Machine-readable JSON on stdout; diagnostics on stderr
+    --quiet    Suppress tracing logs (recommended for scripts piping stdout)
     cbrlm install [--dry-run] [--force] [--yes] [--all]
     cbrlm uninstall [--dry-run] [--yes] [--all] [--keep-binary]
     cbrlm hook-augment
@@ -41,7 +45,7 @@ COMPATIBLE AGENTS:
     );
 }
 
-pub fn run_cli(tool: &str, args_json: Option<&str>, json_output: bool) -> Result<()> {
+pub fn run_cli(tool: &str, args_json: Option<&str>, json_output: bool, _quiet: bool) -> Result<()> {
     let rlm = Arc::new(RlmEngine::new());
     let handler = ToolHandler::new(rlm, None);
     let args: Value = match args_json {
@@ -61,8 +65,14 @@ pub fn run_cli(tool: &str, args_json: Option<&str>, json_output: bool) -> Result
 fn format_cli_human(tool: &str, result: &Value) -> String {
     match tool {
         "index_repository" => {
-            let ok = result.get("success").and_then(|v| v.as_bool()).unwrap_or(false);
-            let project = result.get("project").and_then(|v| v.as_str()).unwrap_or("?");
+            let ok = result
+                .get("success")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let project = result
+                .get("project")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
             let files = result
                 .get("files_indexed")
                 .and_then(|v| v.as_u64())
@@ -75,7 +85,10 @@ fn format_cli_human(tool: &str, result: &Value) -> String {
                 .get("edges_extracted")
                 .and_then(|v| v.as_u64())
                 .unwrap_or(0);
-            let ms = result.get("duration_ms").and_then(|v| v.as_u64()).unwrap_or(0);
+            let ms = result
+                .get("duration_ms")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
             format!(
                 "index {project}: success={ok} files={files} symbols={symbols} edges={edges} ({ms}ms)"
             )
@@ -102,8 +115,14 @@ fn format_cli_human(tool: &str, result: &Value) -> String {
                 .get("symbol_count")
                 .and_then(|v| v.as_u64())
                 .unwrap_or(0);
-            let edges = result.get("edge_count").and_then(|v| v.as_u64()).unwrap_or(0);
-            let files = result.get("file_count").and_then(|v| v.as_u64()).unwrap_or(0);
+            let edges = result
+                .get("edge_count")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let files = result
+                .get("file_count")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
             format!("architecture: symbols={syms} edges={edges} files={files}")
         }
         "list_projects" => {
@@ -130,13 +149,19 @@ pub fn run_install(opts: InstallOptions) -> Result<()> {
         eprintln!("(dry-run mode)");
     }
     let report = install::run_install(&opts)?;
-    eprintln!("\nInstall directory: {}", install::default_install_dir().display());
+    eprintln!(
+        "\nInstall directory: {}",
+        install::default_install_dir().display()
+    );
     eprintln!("Binary: {}", report.binary_path.display());
     if !report.configured.is_empty() {
         eprintln!("Restart your coding agent to load MCP changes.");
     } else if opts.dry_run {
         let snippet = agent.mcp_config_snippet();
-        eprintln!("\nMCP config snippet:\n{}", serde_json::to_string_pretty(&snippet)?);
+        eprintln!(
+            "\nMCP config snippet:\n{}",
+            serde_json::to_string_pretty(&snippet)?
+        );
     }
     Ok(())
 }
@@ -158,12 +183,18 @@ pub fn run_config(action: &str) -> Result<()> {
     match action {
         "list" => {
             for tool in tool_definitions() {
-                println!("{}", tool.get("name").and_then(|v| v.as_str()).unwrap_or("?"));
+                println!(
+                    "{}",
+                    tool.get("name").and_then(|v| v.as_str()).unwrap_or("?")
+                );
             }
         }
         "snippet" => {
             let agent = AgentKind::detect();
-            println!("{}", serde_json::to_string_pretty(&agent.mcp_config_snippet())?);
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&agent.mcp_config_snippet())?
+            );
         }
         _ => {
             eprintln!("Usage: cbrlm config <list|snippet>");
@@ -180,9 +211,8 @@ pub fn run_ui_server(port: u16) -> Result<()> {
         port,
     };
     eprintln!("graph UI: http://127.0.0.1:{port} (Ctrl+C to exit)");
-    let mut http = HttpServer::spawn(&config, Some(shutdown.clone())).ok_or_else(|| {
-        crate::error::Error::Other("failed to start HTTP server".into())
-    })?;
+    let mut http = HttpServer::spawn(&config, Some(shutdown.clone()))
+        .ok_or_else(|| crate::error::Error::Other("failed to start HTTP server".into()))?;
     while !shutdown.is_triggered() {
         std::thread::sleep(std::time::Duration::from_millis(200));
     }
@@ -222,7 +252,10 @@ pub fn run_mcp_server(ui_config: UiConfig) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::format_cli_human;
+    use crate::mcp::ToolHandler;
+    use crate::rlm::RlmEngine;
     use serde_json::json;
+    use std::sync::Arc;
 
     #[test]
     fn human_index_summary() {
@@ -232,6 +265,18 @@ mod tests {
         );
         assert!(out.contains("cbrlm+x"));
         assert!(out.contains("symbols=10"));
+    }
+
+    #[test]
+    fn json_output_is_parseable() {
+        let rlm = Arc::new(RlmEngine::new());
+        let handler = ToolHandler::new(rlm, None);
+        let result = handler
+            .handle("list_projects", &serde_json::json!({}))
+            .unwrap();
+        let parsed: serde_json::Value =
+            serde_json::from_str(&serde_json::to_string(&result).unwrap()).unwrap();
+        assert!(parsed.is_object() || parsed.is_array());
     }
 
     #[test]

@@ -656,6 +656,8 @@ Quality gates from Section 4 still apply after each slice.
 
 ## Section 6 - Review Notes After Composer 2.5 Implementation
 
+**Status: complete (#all)** — items 6.1–6.8 done; see `PARITY_MATRIX.md` Section 6 table.
+
 Review date: 2026-06-12
 
 Reviewer: Codex
@@ -663,20 +665,20 @@ Reviewer: Codex
 Context:
 
 - Composer 2.5 implemented a large part of the original TODO list.
-- Local validation now passes:
-  - `cargo test`
+- Section 6 hardening applied (RLM session persistence, CALLS fixtures, release smoke, `--quiet`, docs).
+- Local validation passes:
+  - `cargo test` (81 cases)
   - `cargo clippy --all-targets -- -D warnings`
   - `cargo build --release`
   - `.\scripts\smoke-quality-gates.ps1 -SkipBuild`
-- Additional smoke checks confirmed:
-  - `search_graph` regex name patterns work.
-  - `query_graph` allows string literals like `SELECT 'UPDATE' AS word`.
-  - Semantic indexing can store vectors and emit `SIMILAR_TO` / `SEMANTICALLY_RELATED`.
-  - `get_architecture` reports multiple emitted edge types for indexed projects.
+  - `.\scripts\smoke-release-artifact.ps1 -SkipBuild`
+- Smoke checks confirm `search_graph`, `query_graph` edge diversity, semantic edges, and `get_architecture`.
 
-The project is now much closer to a Rust rewrite MVP. The remaining work below is mostly about making claims precise, hardening interactive workflows, and moving from heuristic parity to production-grade parity.
+MVP rewrite is complete (Sections 3–6). Full reference parity remains in `PARITY_MATRIX.md` backlog (Leiden, HTTP_CALLS, bulk tx, multi-lang AST CALLS, …).
 
 ### TODO 6.1 - Fix CLI `rlm_scan` Session Usability
+
+Status: **Done** (2026-06-12) — disk persistence under `CBRLM_CACHE_DIR/rlm-sessions`, TTL/size limits, integration test.
 
 Priority: `P1`
 
@@ -704,6 +706,8 @@ Acceptance criteria:
 
 ### TODO 6.2 - Keep README and Parity Matrix Numerically Accurate
 
+Status: **Done** (2026-06-12) — no hard-coded test counts; CI is source of truth.
+
 Priority: `P2`
 
 Observation:
@@ -724,6 +728,8 @@ Acceptance criteria:
 - CI remains the source of truth for gate status.
 
 ### TODO 6.3 - Split "Done" From "Heuristic / Partial" More Carefully
+
+Status: **Done** (2026-06-12) — MVP vs full parity model, heuristic labels, full parity blockers in `PARITY_MATRIX.md`.
 
 Priority: `P1`
 
@@ -752,6 +758,8 @@ Acceptance criteria:
 
 ### TODO 6.4 - Add Release-Artifact Verification Beyond Local Build
 
+Status: **Done** (2026-06-12) — `scripts/smoke-release-artifact.ps1`; wired in CI and release workflows.
+
 Priority: `P2`
 
 Observation:
@@ -777,6 +785,8 @@ Acceptance criteria:
 
 ### TODO 6.5 - Add Cross-Language CALLS Precision Fixtures
 
+Status: **Done** (2026-06-12) — `tests/calls_precision_test.rs` (Py/JS/Go/Java local calls, ambiguity, regex metadata).
+
 Priority: `P1`
 
 Observation:
@@ -799,6 +809,8 @@ Acceptance criteria:
 
 ### TODO 6.6 - Extend Smoke Gates To Assert Edge-Type Diversity From Query Layer
 
+Status: **Done** (2026-06-12) — `query_graph` edge-type GROUP BY in smoke-quality-gates scripts.
+
 Priority: `P2`
 
 Observation:
@@ -819,6 +831,8 @@ Acceptance criteria:
 
 ### TODO 6.7 - Decide Whether CLI Logs Should Be Quiet Under `--json`
 
+Status: **Done** (2026-06-12) — `--quiet` defers tracing; README documents stdout JSON / stderr logs; `json_output_is_parseable` test.
+
 Priority: `P2`
 
 Observation:
@@ -838,6 +852,8 @@ Acceptance criteria:
 - Combined-stream behavior is documented for PowerShell users.
 
 ### TODO 6.8 - Add Full-Parity Backlog Items Explicitly
+
+Status: **Done** (2026-06-12) — Full parity backlog + blockers in `PARITY_MATRIX.md`.
 
 Priority: `P2`
 
@@ -860,3 +876,193 @@ Recommended work:
 Acceptance criteria:
 
 - Full-parity gaps are easy to find without reading all TODO history.
+
+## Section 7 - Post-Composer 2.5 Review Notes
+
+Review date: 2026-06-12
+
+Reviewer: Codex
+
+Context:
+
+- Composer 2.5 completed the Section 6 implementation pass.
+- Local validation passed after reviewer formatting:
+  - `cargo fmt --check`
+  - `cargo test --all-targets`
+  - `cargo clippy --all-targets -- -D warnings`
+  - `cargo build --release`
+  - `.\scripts\smoke-quality-gates.ps1 -SkipBuild`
+  - `.\scripts\smoke-release-artifact.ps1 -SkipBuild`
+- A real two-process CLI smoke also passed:
+  - `cbrlm cli rlm_scan --json --quiet ...`
+  - `cbrlm cli rlm_chunk --json --quiet ...`
+
+The Rust MVP now behaves much more like a usable CBM replacement. The remaining items below are not blockers for the current MVP, but they are important before claiming stronger full-reference parity or release-grade automation.
+
+### TODO 7.1 - Make Release Artifact Smoke Matrix-Aware
+
+Priority: `P1`
+
+Observation:
+
+- `scripts/smoke-release-artifact.ps1` works locally after `cargo build --release`.
+- In `.github/workflows/release.yml`, the Windows matrix builds `target/${{ matrix.target }}/release/cbrlm.exe`.
+- The smoke script currently assumes `target\release\cbrlm.exe` and hard-codes `cbrlm-windows-x64`.
+- This can make the release workflow repackage or look for the wrong binary path when run inside the target matrix.
+
+Recommended work:
+
+- Add parameters such as:
+  - `-ArtifactName`
+  - `-BinaryPath`
+  - `-ArchivePath`
+  - `-SkipPackage`
+- In the release workflow, smoke the archive that was just produced by the packaging step.
+- Keep the no-argument local mode for developer convenience.
+
+Acceptance criteria:
+
+- Windows release workflow validates `dist/${{ matrix.artifact }}.zip` without depending on `target\release\cbrlm.exe`.
+- Local `.\scripts\smoke-release-artifact.ps1 -SkipBuild` still works.
+
+### TODO 7.2 - Add `cargo fmt --check` To CI And Smoke Gates
+
+Priority: `P1`
+
+Observation:
+
+- The implementation passed tests and clippy, but `cargo fmt --check` failed before reviewer formatting.
+- Current CI gates do not appear to enforce formatting.
+- Without this gate, future generated patches can drift into large formatting-only churn.
+
+Recommended work:
+
+- Add a CI step before clippy:
+  - `cargo fmt --check`
+- Optionally add it to `scripts/smoke-quality-gates.ps1` / `.sh`.
+- Document formatting as a required pre-commit gate in `README.md`.
+
+Acceptance criteria:
+
+- CI fails on unformatted Rust code.
+- Section quality gates list `cargo fmt --check`.
+
+### TODO 7.3 - Add Process-Level CLI JSON Tests
+
+Priority: `P2`
+
+Observation:
+
+- The new `json_output_is_parseable` unit test verifies serialized handler output, but it does not execute the compiled CLI.
+- Smoke scripts cover process behavior, but a focused test should assert stdout/stderr behavior across the actual binary invocation.
+
+Recommended work:
+
+- Add an integration test using `assert_cmd` or equivalent.
+- Verify:
+  - `cbrlm cli list_projects --json --quiet` writes parseable JSON to stdout.
+  - stderr is empty or explicitly documented.
+  - normal `--json` keeps stdout parseable even if diagnostics go to stderr.
+
+Acceptance criteria:
+
+- A regression that prints logs to stdout under `--json` fails tests.
+- PowerShell and Unix script examples match tested behavior.
+
+### TODO 7.4 - Harden RLM Session Persistence Writes
+
+Priority: `P2`
+
+Observation:
+
+- Persisted RLM sessions now survive across separate CLI invocations.
+- `persist_session` writes JSON directly to the final path.
+- A crash, interrupted write, or concurrent writer could leave a partial JSON file.
+- `load_persisted_sessions` skips unreadable/corrupt files, but does not clean them up or report counts.
+
+Recommended work:
+
+- Write sessions atomically:
+  - write to a temp file in the same directory
+  - flush
+  - rename to `<session_id>.json`
+- Consider a lightweight lock or unique temp filenames for concurrent scans.
+- Track skipped corrupt/expired sessions in debug logs or metadata.
+- Add tests for corrupt session files and concurrent-ish writes.
+
+Acceptance criteria:
+
+- Interrupted or corrupt session files do not break future scans.
+- Corrupt files are either quarantined, removed, or counted.
+- Session persistence remains Windows-safe.
+
+### TODO 7.5 - Deepen CALLS Precision Fixtures Beyond Direct Resolver Tests
+
+Priority: `P1`
+
+Observation:
+
+- `tests/calls_precision_test.rs` adds useful language coverage.
+- Most new checks call `resolve_calls_with_registry` directly with hand-built symbols.
+- This catches resolver behavior, but not extraction + indexing + store/query behavior for realistic files.
+- Method calls, imports/aliases, classes, modules, overload-like patterns, and nested scopes are still shallowly covered.
+
+Recommended work:
+
+- Add fixture repositories per language and run the full pipeline.
+- Assert graph output through `search_graph`, `trace_path`, or direct store queries.
+- Include negative cases:
+  - same function name in different modules
+  - method calls vs free functions
+  - imported aliases
+  - nested functions/classes
+  - common framework callback names
+
+Acceptance criteria:
+
+- Full pipeline tests catch false-positive CALLS edges, not only resolver-unit regressions.
+- `properties_json` clearly identifies `method=rust_ast`, `method=regex`, or future language AST methods.
+
+### TODO 7.6 - Add Installer And MCP Protocol Smoke From Release Artifact
+
+Priority: `P2`
+
+Observation:
+
+- The release smoke extracts the binary, runs `--version`, and indexes a small project.
+- It does not validate install scripts from the release artifact path.
+- It also does not run a minimal MCP JSON-RPC initialize/list-tools round trip from the extracted binary.
+
+Recommended work:
+
+- Add release smoke steps for:
+  - `scripts\install.ps1 -DryRun` or `packaging\windows\install.ps1` against the extracted binary.
+  - MCP stdio `initialize` and `tools/list` using the extracted binary.
+- Keep side effects isolated to a temp `CBRLM_CACHE_DIR` and temp config HOME when possible.
+
+Acceptance criteria:
+
+- A packaged binary is proven to work as CLI and MCP server before release.
+- Installer dry-run validates paths and config snippets without touching the real user config.
+
+### TODO 7.7 - Clarify "MVP Complete" vs "Rust Replica" In Project Language
+
+Priority: `P2`
+
+Observation:
+
+- README and parity matrix now state MVP completion and full parity gaps.
+- The phrase "Rust rewrite complete" can still be misread as "complete reference replica".
+- Current implementation intentionally keeps SQLite canonical and omits FoundationDB.
+
+Recommended work:
+
+- Use consistent wording:
+  - "Rust MVP rewrite complete"
+  - "Full reference parity backlog remains"
+  - "FoundationDB omitted by design"
+- Avoid saying "complete rewrite" without the MVP qualifier in docs, release notes, and future task lists.
+
+Acceptance criteria:
+
+- A new agent can tell which claims are release-ready and which are only MVP-ready without reading all historical TODO sections.

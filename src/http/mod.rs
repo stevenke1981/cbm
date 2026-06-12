@@ -109,9 +109,9 @@ async fn run_server(
         .layer(CorsLayer::permissive());
 
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
-    let listener = tokio::net::TcpListener::bind(addr).await.map_err(|e| {
-        crate::error::Error::Other(format!("bind {addr}: {e}"))
-    })?;
+    let listener = tokio::net::TcpListener::bind(addr)
+        .await
+        .map_err(|e| crate::error::Error::Other(format!("bind {addr}: {e}")))?;
 
     info!(%addr, "HTTP graph UI listening");
 

@@ -42,7 +42,12 @@ impl MemoryBudget {
             }
             if self
                 .used
-                .compare_exchange_weak(current, current + bytes, Ordering::Relaxed, Ordering::Relaxed)
+                .compare_exchange_weak(
+                    current,
+                    current + bytes,
+                    Ordering::Relaxed,
+                    Ordering::Relaxed,
+                )
                 .is_ok()
             {
                 return true;

@@ -38,7 +38,10 @@ impl ToolHandler {
             "manage_adr" => self.manage_adr(args),
             "ingest_traces" => self.ingest_traces(args),
             "rlm_workflow" => {
-                let phase = args.get("phase").and_then(|v| v.as_str()).unwrap_or("overview");
+                let phase = args
+                    .get("phase")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("overview");
                 Ok(self.rlm.workflow(phase))
             }
             "rlm_filter" => self.rlm_filter(args),
@@ -60,10 +63,7 @@ impl ToolHandler {
 
     fn index_repository(&self, args: &Value) -> Result<Value> {
         let repo_path = Self::require_str(args, "repo_path")?;
-        let mode = args
-            .get("mode")
-            .and_then(|v| v.as_str())
-            .unwrap_or("full");
+        let mode = args.get("mode").and_then(|v| v.as_str()).unwrap_or("full");
         let project = args.get("project").and_then(|v| v.as_str());
         let incremental = args
             .get("incremental")
@@ -105,10 +105,7 @@ impl ToolHandler {
             .or_else(|| args.get("semantic_query"))
             .and_then(|v| v.as_str())
         {
-            let limit = args
-                .get("limit")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(20) as usize;
+            let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(20) as usize;
             let result = semantic::vector_search(&store, vector_query, limit)?;
             return Ok(serde_json::to_value(result)?);
         }
@@ -131,10 +128,7 @@ impl ToolHandler {
             .get("direction")
             .and_then(|v| v.as_str())
             .unwrap_or("both");
-        let depth = args
-            .get("depth")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(3) as usize;
+        let depth = args.get("depth").and_then(|v| v.as_u64()).unwrap_or(3) as usize;
         let store = Store::open(&project)?;
         let result = store.trace_path(function_name, direction, depth)?;
         Ok(serde_json::to_value(result)?)
@@ -176,10 +170,7 @@ impl ToolHandler {
             .and_then(|v| v.as_str())
             .or_else(|| args.get("query").and_then(|v| v.as_str()))
             .unwrap_or("");
-        let limit = args
-            .get("limit")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(20) as usize;
+        let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(20) as usize;
         let store = Store::open(&project)?;
         let matches = store.search_code(pattern, limit)?;
         Ok(json!({ "matches": matches }))
@@ -291,10 +282,7 @@ impl ToolHandler {
 
     fn manage_adr(&self, args: &Value) -> Result<Value> {
         let project = normalize_project_name(Self::require_str(args, "project")?);
-        let action = args
-            .get("action")
-            .and_then(|v| v.as_str())
-            .unwrap_or("get");
+        let action = args.get("action").and_then(|v| v.as_str()).unwrap_or("get");
         let store = Store::open(&project)?;
         match action {
             "set" => {
@@ -339,11 +327,26 @@ impl ToolHandler {
 
 fn parse_search_filter(args: &Value) -> SearchFilter {
     SearchFilter {
-        query: args.get("query").and_then(|v| v.as_str()).map(str::to_string),
-        label: args.get("label").and_then(|v| v.as_str()).map(str::to_string),
-        name_pattern: args.get("name_pattern").and_then(|v| v.as_str()).map(str::to_string),
-        qn_pattern: args.get("qn_pattern").and_then(|v| v.as_str()).map(str::to_string),
-        file_pattern: args.get("file_pattern").and_then(|v| v.as_str()).map(str::to_string),
+        query: args
+            .get("query")
+            .and_then(|v| v.as_str())
+            .map(str::to_string),
+        label: args
+            .get("label")
+            .and_then(|v| v.as_str())
+            .map(str::to_string),
+        name_pattern: args
+            .get("name_pattern")
+            .and_then(|v| v.as_str())
+            .map(str::to_string),
+        qn_pattern: args
+            .get("qn_pattern")
+            .and_then(|v| v.as_str())
+            .map(str::to_string),
+        file_pattern: args
+            .get("file_pattern")
+            .and_then(|v| v.as_str())
+            .map(str::to_string),
         relationship: args
             .get("relationship")
             .and_then(|v| v.as_str())
@@ -385,145 +388,233 @@ fn find_symbol_any_project(qn: &str) -> Result<Store> {
 
 pub fn tool_definitions() -> Vec<Value> {
     vec![
-        tool_def("index_repository", "Index a repository into the knowledge graph.", json!({
-            "type": "object",
-            "required": ["repo_path"],
-            "properties": {
-                "repo_path": { "type": "string" },
-                "project": { "type": ["string", "null"] },
-                "mode": { "type": ["string", "null"], "enum": ["full", "moderate", "fast"] },
-                "incremental": { "type": ["boolean", "null"], "default": false },
-                "persistence": { "type": ["boolean", "null"] }
-            }
-        })),
-        tool_def("search_graph", "Search the code knowledge graph.", search_schema()),
-        tool_def("trace_path", "Trace call paths via BFS.", json!({
-            "type": "object",
-            "required": ["project", "function_name"],
-            "properties": {
-                "project": { "type": "string" },
-                "function_name": { "type": "string" },
-                "direction": { "type": "string", "default": "both" },
-                "depth": { "type": "integer", "default": 3 }
-            }
-        })),
-        tool_def("get_code_snippet", "Read source code for a symbol.", json!({
-            "type": "object",
-            "required": ["qualified_name"],
-            "properties": {
-                "project": { "type": "string" },
-                "qualified_name": { "type": "string" }
-            }
-        })),
-        tool_def("get_graph_schema", "Return graph schema.", json!({ "type": "object", "properties": {} })),
-        tool_def("get_architecture", "Architecture overview.", json!({
-            "type": "object",
-            "required": ["project"],
-            "properties": { "project": { "type": "string" } }
-        })),
-        tool_def("search_code", "Full-text code search.", json!({
-            "type": "object",
-            "required": ["project"],
-            "properties": {
-                "project": { "type": "string" },
-                "pattern": { "type": "string" },
-                "query": { "type": "string" },
-                "limit": { "type": "integer", "default": 20 }
-            }
-        })),
-        tool_def("list_projects", "List indexed projects.", json!({ "type": "object", "properties": {} })),
-        tool_def("delete_project", "Delete project index.", json!({
-            "type": "object",
-            "required": ["project"],
-            "properties": { "project": { "type": "string" } }
-        })),
-        tool_def("index_status", "Index status query.", json!({
-            "type": "object",
-            "required": ["project"],
-            "properties": { "project": { "type": "string" } }
-        })),
-        tool_def("query_graph", "SQL SELECT on graph tables.", json!({
-            "type": "object",
-            "required": ["query"],
-            "properties": {
-                "query": { "type": "string" },
-                "project": { "type": "string" }
-            }
-        })),
-        tool_def("detect_changes", "Detect git changes.", json!({
-            "type": "object",
-            "required": ["project"],
-            "properties": { "project": { "type": "string" } }
-        })),
-        tool_def("manage_adr", "Architecture Decision Record CRUD.", json!({
-            "type": "object",
-            "required": ["project"],
-            "properties": {
-                "project": { "type": "string" },
-                "action": { "type": "string", "enum": ["get", "set", "delete"] },
-                "content": { "type": "string" }
-            }
-        })),
-        tool_def("ingest_traces", "Ingest runtime traces as RUNTIME_TRACE edges.", json!({
-            "type": "object",
-            "required": ["project", "traces"],
-            "properties": {
-                "project": { "type": "string" },
-                "traces": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "caller": { "type": "string" },
-                            "callee": { "type": "string" },
-                            "from": { "type": "string" },
-                            "to": { "type": "string" }
+        tool_def(
+            "index_repository",
+            "Index a repository into the knowledge graph.",
+            json!({
+                "type": "object",
+                "required": ["repo_path"],
+                "properties": {
+                    "repo_path": { "type": "string" },
+                    "project": { "type": ["string", "null"] },
+                    "mode": { "type": ["string", "null"], "enum": ["full", "moderate", "fast"] },
+                    "incremental": { "type": ["boolean", "null"], "default": false },
+                    "persistence": { "type": ["boolean", "null"] }
+                }
+            }),
+        ),
+        tool_def(
+            "search_graph",
+            "Search the code knowledge graph.",
+            search_schema(),
+        ),
+        tool_def(
+            "trace_path",
+            "Trace call paths via BFS.",
+            json!({
+                "type": "object",
+                "required": ["project", "function_name"],
+                "properties": {
+                    "project": { "type": "string" },
+                    "function_name": { "type": "string" },
+                    "direction": { "type": "string", "default": "both" },
+                    "depth": { "type": "integer", "default": 3 }
+                }
+            }),
+        ),
+        tool_def(
+            "get_code_snippet",
+            "Read source code for a symbol.",
+            json!({
+                "type": "object",
+                "required": ["qualified_name"],
+                "properties": {
+                    "project": { "type": "string" },
+                    "qualified_name": { "type": "string" }
+                }
+            }),
+        ),
+        tool_def(
+            "get_graph_schema",
+            "Return graph schema.",
+            json!({ "type": "object", "properties": {} }),
+        ),
+        tool_def(
+            "get_architecture",
+            "Architecture overview.",
+            json!({
+                "type": "object",
+                "required": ["project"],
+                "properties": { "project": { "type": "string" } }
+            }),
+        ),
+        tool_def(
+            "search_code",
+            "Full-text code search.",
+            json!({
+                "type": "object",
+                "required": ["project"],
+                "properties": {
+                    "project": { "type": "string" },
+                    "pattern": { "type": "string" },
+                    "query": { "type": "string" },
+                    "limit": { "type": "integer", "default": 20 }
+                }
+            }),
+        ),
+        tool_def(
+            "list_projects",
+            "List indexed projects.",
+            json!({ "type": "object", "properties": {} }),
+        ),
+        tool_def(
+            "delete_project",
+            "Delete project index.",
+            json!({
+                "type": "object",
+                "required": ["project"],
+                "properties": { "project": { "type": "string" } }
+            }),
+        ),
+        tool_def(
+            "index_status",
+            "Index status query.",
+            json!({
+                "type": "object",
+                "required": ["project"],
+                "properties": { "project": { "type": "string" } }
+            }),
+        ),
+        tool_def(
+            "query_graph",
+            "SQL SELECT on graph tables.",
+            json!({
+                "type": "object",
+                "required": ["query"],
+                "properties": {
+                    "query": { "type": "string" },
+                    "project": { "type": "string" }
+                }
+            }),
+        ),
+        tool_def(
+            "detect_changes",
+            "Detect git changes.",
+            json!({
+                "type": "object",
+                "required": ["project"],
+                "properties": { "project": { "type": "string" } }
+            }),
+        ),
+        tool_def(
+            "manage_adr",
+            "Architecture Decision Record CRUD.",
+            json!({
+                "type": "object",
+                "required": ["project"],
+                "properties": {
+                    "project": { "type": "string" },
+                    "action": { "type": "string", "enum": ["get", "set", "delete"] },
+                    "content": { "type": "string" }
+                }
+            }),
+        ),
+        tool_def(
+            "ingest_traces",
+            "Ingest runtime traces as RUNTIME_TRACE edges.",
+            json!({
+                "type": "object",
+                "required": ["project", "traces"],
+                "properties": {
+                    "project": { "type": "string" },
+                    "traces": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "caller": { "type": "string" },
+                                "callee": { "type": "string" },
+                                "from": { "type": "string" },
+                                "to": { "type": "string" }
+                            }
                         }
                     }
                 }
-            }
-        })),
-        tool_def("rlm_workflow", "RLM workflow guidance.", json!({
-            "type": "object",
-            "properties": { "phase": { "type": "string", "default": "overview" } }
-        })),
-        tool_def("rlm_filter", "RLM filter via graph search.", search_schema()),
-        tool_def("rlm_read_symbol", "RLM map unit — one symbol.", json!({
-            "type": "object",
-            "required": ["project", "qualified_name"],
-            "properties": {
-                "project": { "type": "string" },
-                "qualified_name": { "type": "string" }
-            }
-        })),
-        tool_def("rlm_scan", "Scan directory into RLM session.", json!({
-            "type": "object",
-            "required": ["path"],
-            "properties": { "path": { "type": "string" } }
-        })),
-        tool_def("rlm_chunk", "Read RLM session chunks.", json!({
-            "type": "object",
-            "required": ["session_id"],
-            "properties": {
-                "session_id": { "type": "string" },
-                "offset": { "type": "integer", "default": 0 },
-                "limit": { "type": "integer", "default": 3 }
-            }
-        })),
-        tool_def("rlm_peek", "Search within RLM session.", json!({
-            "type": "object",
-            "required": ["session_id", "query"],
-            "properties": {
-                "session_id": { "type": "string" },
-                "query": { "type": "string" }
-            }
-        })),
-        tool_def("rlm_session_list", "List RLM scan sessions.", json!({ "type": "object", "properties": {} })),
-        tool_def("rlm_session_delete", "Delete RLM session.", json!({
-            "type": "object",
-            "required": ["session_id"],
-            "properties": { "session_id": { "type": "string" } }
-        })),
+            }),
+        ),
+        tool_def(
+            "rlm_workflow",
+            "RLM workflow guidance.",
+            json!({
+                "type": "object",
+                "properties": { "phase": { "type": "string", "default": "overview" } }
+            }),
+        ),
+        tool_def(
+            "rlm_filter",
+            "RLM filter via graph search.",
+            search_schema(),
+        ),
+        tool_def(
+            "rlm_read_symbol",
+            "RLM map unit — one symbol.",
+            json!({
+                "type": "object",
+                "required": ["project", "qualified_name"],
+                "properties": {
+                    "project": { "type": "string" },
+                    "qualified_name": { "type": "string" }
+                }
+            }),
+        ),
+        tool_def(
+            "rlm_scan",
+            "Scan directory into RLM session.",
+            json!({
+                "type": "object",
+                "required": ["path"],
+                "properties": { "path": { "type": "string" } }
+            }),
+        ),
+        tool_def(
+            "rlm_chunk",
+            "Read RLM session chunks.",
+            json!({
+                "type": "object",
+                "required": ["session_id"],
+                "properties": {
+                    "session_id": { "type": "string" },
+                    "offset": { "type": "integer", "default": 0 },
+                    "limit": { "type": "integer", "default": 3 }
+                }
+            }),
+        ),
+        tool_def(
+            "rlm_peek",
+            "Search within RLM session.",
+            json!({
+                "type": "object",
+                "required": ["session_id", "query"],
+                "properties": {
+                    "session_id": { "type": "string" },
+                    "query": { "type": "string" }
+                }
+            }),
+        ),
+        tool_def(
+            "rlm_session_list",
+            "List RLM scan sessions.",
+            json!({ "type": "object", "properties": {} }),
+        ),
+        tool_def(
+            "rlm_session_delete",
+            "Delete RLM session.",
+            json!({
+                "type": "object",
+                "required": ["session_id"],
+                "properties": { "session_id": { "type": "string" } }
+            }),
+        ),
     ]
 }
 
@@ -565,8 +656,7 @@ impl PipelineGuard {
 
 impl Drop for PipelineGuard {
     fn drop(&mut self) {
-        self.busy
-            .store(false, std::sync::atomic::Ordering::SeqCst);
+        self.busy.store(false, std::sync::atomic::Ordering::SeqCst);
     }
 }
 

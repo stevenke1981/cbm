@@ -35,7 +35,11 @@ impl PhaseTimer {
 impl Drop for PhaseTimer {
     fn drop(&mut self) {
         if self.enabled {
-            info!(phase = self.label, duration_ms = self.elapsed_ms(), "profile");
+            info!(
+                phase = self.label,
+                duration_ms = self.elapsed_ms(),
+                "profile"
+            );
         }
     }
 }

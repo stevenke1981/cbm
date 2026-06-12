@@ -7,6 +7,7 @@ use cbrlm::project::normalize_project_name;
 use cbrlm::store::{SearchFilter, Store};
 use serde_json::json;
 use std::fs;
+use std::sync::Arc;
 use support::isolated_cache;
 use tempfile::TempDir;
 
@@ -86,7 +87,11 @@ fn search_and_trace_call_graph() {
 
     let store = Store::open(&index.project).unwrap();
     let count = store.count_symbols().unwrap();
-    assert!(count > 0, "db should contain {} symbols, got count={count}", index.symbols_extracted);
+    assert!(
+        count > 0,
+        "db should contain {} symbols, got count={count}",
+        index.symbols_extracted
+    );
 
     let all = store.search(&SearchFilter::default()).unwrap();
     assert!(
@@ -208,6 +213,33 @@ fn rlm_scan_and_chunk() {
 }
 
 #[test]
+fn cli_rlm_scan_chunk_persists_across_invocations() {
+    let (_guard, _cache, _) = isolated_cache();
+    let dir = fixture_repo();
+    let path = dir.path().to_string_lossy().to_string();
+
+    let rlm1 = Arc::new(cbrlm::rlm::RlmEngine::new());
+    let handler1 = cbrlm::mcp::ToolHandler::new(rlm1, None);
+    let scan = handler1
+        .handle("rlm_scan", &json!({ "path": path }))
+        .expect("rlm_scan");
+    let session_id = scan
+        .get("session_id")
+        .and_then(|v| v.as_str())
+        .expect("session_id");
+
+    let rlm2 = Arc::new(cbrlm::rlm::RlmEngine::new());
+    let handler2 = cbrlm::mcp::ToolHandler::new(rlm2, None);
+    let chunk = handler2
+        .handle(
+            "rlm_chunk",
+            &json!({ "session_id": session_id, "offset": 0, "limit": 1 }),
+        )
+        .expect("rlm_chunk should load persisted session");
+    assert!(chunk.get("chunks").and_then(|v| v.as_array()).is_some());
+}
+
+#[test]
 fn ingest_runtime_traces() {
     let (_guard, _cache, _) = isolated_cache();
     let dir = fixture_repo();
@@ -238,7 +270,10 @@ fn ingest_runtime_traces() {
         .expect("format_message symbol");
 
     let ingested = store
-        .ingest_traces(&[(greet.qualified_name.clone(), format_msg.qualified_name.clone())])
+        .ingest_traces(&[(
+            greet.qualified_name.clone(),
+            format_msg.qualified_name.clone(),
+        )])
         .unwrap();
     assert_eq!(ingested, 1);
 
@@ -291,7 +326,10 @@ fn search_graph_regex_name_pattern() {
             ..Default::default()
         })
         .unwrap();
-    assert!(!hits.symbols.is_empty(), "regex name_pattern should match greet");
+    assert!(
+        !hits.symbols.is_empty(),
+        "regex name_pattern should match greet"
+    );
 
     let _ = cbrlm::store::delete_project_db(&index.project);
 }
@@ -329,7 +367,9 @@ fn search_graph_relationship_and_degree_filters() {
 
     let schema = store.get_schema();
     assert!(schema.implemented_edge_types.contains(&"CALLS".to_string()));
-    assert!(schema.implemented_edge_types.contains(&"CONTAINS".to_string()));
+    assert!(schema
+        .implemented_edge_types
+        .contains(&"CONTAINS".to_string()));
 
     let _ = cbrlm::store::delete_project_db(&index.project);
 }
@@ -371,9 +411,7 @@ fn semantic_pass_emits_edges_with_signal_breakdown() {
     std::fs::write(dir.path().join("ui.rs"), "pub fn render_page() {}\n").unwrap();
 
     let pipeline = Pipeline::new(IndexMode::Full);
-    let index = pipeline
-        .run(dir.path(), Some("semantic-edges"))
-        .unwrap();
+    let index = pipeline.run(dir.path(), Some("semantic-edges")).unwrap();
     assert!(index.vectors_stored >= 2);
     assert!(index.semantic_edges > 0, "expected semantic edges");
 
@@ -383,9 +421,9 @@ fn semantic_pass_emits_edges_with_signal_breakdown() {
     assert!(similar + related > 0);
 
     let edges = store.list_edges_limited(20).unwrap();
-    assert!(edges.iter().any(|e| {
-        e.edge_type == "SIMILAR_TO" || e.edge_type == "SEMANTICALLY_RELATED"
-    }));
+    assert!(edges
+        .iter()
+        .any(|e| { e.edge_type == "SIMILAR_TO" || e.edge_type == "SEMANTICALLY_RELATED" }));
     assert!(edges.iter().any(|e| {
         e.properties_json
             .as_ref()

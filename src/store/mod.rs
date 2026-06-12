@@ -10,7 +10,6 @@ use crate::project::project_db_path;
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 use std::collections::{HashMap, HashSet, VecDeque};
 
-
 pub struct Store {
     conn: Connection,
     project: String,
@@ -52,7 +51,9 @@ impl Store {
     }
 
     pub fn integrity_check(&self) -> Result<String> {
-        let result: String = self.conn.query_row("PRAGMA integrity_check", [], |row| row.get(0))?;
+        let result: String = self
+            .conn
+            .query_row("PRAGMA integrity_check", [], |row| row.get(0))?;
         Ok(result)
     }
 
@@ -133,25 +134,41 @@ impl Store {
     }
 
     pub fn delete_project(&self) -> Result<()> {
-        self.conn.execute("DELETE FROM edges WHERE project = ?1", params![self.project])?;
-        self.conn
-            .execute("DELETE FROM symbols WHERE project = ?1", params![self.project])?;
-        self.conn
-            .execute("DELETE FROM files WHERE project = ?1", params![self.project])?;
+        self.conn.execute(
+            "DELETE FROM edges WHERE project = ?1",
+            params![self.project],
+        )?;
+        self.conn.execute(
+            "DELETE FROM symbols WHERE project = ?1",
+            params![self.project],
+        )?;
+        self.conn.execute(
+            "DELETE FROM files WHERE project = ?1",
+            params![self.project],
+        )?;
         self.clear_vectors()?;
         self.conn
             .execute("DELETE FROM meta WHERE project = ?1", params![self.project])?;
-        self.conn
-            .execute("DELETE FROM projects WHERE name = ?1", params![self.project])?;
+        self.conn.execute(
+            "DELETE FROM projects WHERE name = ?1",
+            params![self.project],
+        )?;
         Ok(())
     }
 
     pub fn clear_project_data(&self) -> Result<()> {
-        self.conn.execute("DELETE FROM edges WHERE project = ?1", params![self.project])?;
-        self.conn
-            .execute("DELETE FROM symbols WHERE project = ?1", params![self.project])?;
-        self.conn
-            .execute("DELETE FROM files WHERE project = ?1", params![self.project])?;
+        self.conn.execute(
+            "DELETE FROM edges WHERE project = ?1",
+            params![self.project],
+        )?;
+        self.conn.execute(
+            "DELETE FROM symbols WHERE project = ?1",
+            params![self.project],
+        )?;
+        self.conn.execute(
+            "DELETE FROM files WHERE project = ?1",
+            params![self.project],
+        )?;
         self.clear_vectors()?;
         Ok(())
     }
@@ -280,20 +297,20 @@ impl Store {
     }
 
     pub fn checkpoint(&self) -> Result<()> {
-        let _: (i32, i32, i32) = self
-            .conn
-            .query_row("PRAGMA wal_checkpoint(PASSIVE)", [], |row| {
-                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
-            })?;
+        let _: (i32, i32, i32) =
+            self.conn
+                .query_row("PRAGMA wal_checkpoint(PASSIVE)", [], |row| {
+                    Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+                })?;
         Ok(())
     }
 
     pub fn checkpoint_truncate(&self) -> Result<()> {
-        let _: (i32, i32, i32) = self
-            .conn
-            .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| {
-                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
-            })?;
+        let _: (i32, i32, i32) =
+            self.conn
+                .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| {
+                    Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+                })?;
         Ok(())
     }
 
@@ -356,9 +373,7 @@ impl Store {
             if filter.min_degree.is_some() || filter.max_degree.is_some() {
                 filtered.retain(|sym| {
                     let degree = graph.degree(&sym.qualified_name, relationship, direction);
-                    filter
-                        .min_degree
-                        .is_none_or(|min| degree >= min)
+                    filter.min_degree.is_none_or(|min| degree >= min)
                         && filter.max_degree.is_none_or(|max| degree <= max)
                 });
             }
@@ -374,10 +389,8 @@ impl Store {
                     .iter()
                     .map(|s| (s.qualified_name.clone(), s.clone()))
                     .collect();
-                let mut expanded: HashSet<String> = filtered
-                    .iter()
-                    .map(|s| s.qualified_name.clone())
-                    .collect();
+                let mut expanded: HashSet<String> =
+                    filtered.iter().map(|s| s.qualified_name.clone()).collect();
                 let mut connected = filtered.clone();
                 for sym in &filtered {
                     for neighbor in graph.neighbors(&sym.qualified_name, rel) {
@@ -510,9 +523,9 @@ impl Store {
     }
 
     pub fn search_code(&self, pattern: &str, limit: usize) -> Result<Vec<CodeMatch>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT path, content, language FROM files WHERE project = ?1",
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT path, content, language FROM files WHERE project = ?1")?;
         let mut matches = Vec::new();
         let rows = stmt.query_map(params![self.project], |row| {
             Ok((
@@ -577,10 +590,10 @@ impl Store {
         if let Ok(mut edge_stmt) = self.conn.prepare(
             "SELECT edge_type FROM edges WHERE project = ?1 GROUP BY edge_type ORDER BY edge_type",
         ) {
-            if let Ok(rows) = edge_stmt.query_map(params![self.project], |row| row.get::<_, String>(0)) {
-                schema.implemented_edge_types = rows
-                    .filter_map(|r| r.ok())
-                    .collect();
+            if let Ok(rows) =
+                edge_stmt.query_map(params![self.project], |row| row.get::<_, String>(0))
+            {
+                schema.implemented_edge_types = rows.filter_map(|r| r.ok()).collect();
             }
         }
         schema
@@ -636,7 +649,9 @@ impl Store {
         let all_symbols = self.list_symbols()?;
         let mut community_counts: HashMap<u32, (usize, Vec<String>)> = HashMap::new();
         for sym in &all_symbols {
-            let Some(props) = sym.properties_json.as_ref() else { continue };
+            let Some(props) = sym.properties_json.as_ref() else {
+                continue;
+            };
             let Ok(v) = serde_json::from_str::<serde_json::Value>(props) else {
                 continue;
             };
@@ -864,9 +879,9 @@ impl Store {
     }
 
     pub fn list_files(&self) -> Result<Vec<SourceFile>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT path, content, language, line_count FROM files WHERE project = ?1",
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT path, content, language, line_count FROM files WHERE project = ?1")?;
         let rows = stmt
             .query_map(params![self.project], |row| {
                 let stored: String = row.get(1)?;
@@ -979,18 +994,19 @@ impl EdgeGraph {
                     .filter(|((q, _), _)| q == qn)
                     .map(|(_, c)| *c)
                     .sum(),
-                _ => self
-                    .outbound
-                    .iter()
-                    .filter(|((q, _), _)| q == qn)
-                    .map(|(_, c)| *c)
-                    .sum::<usize>()
-                    + self
-                        .inbound
+                _ => {
+                    self.outbound
                         .iter()
                         .filter(|((q, _), _)| q == qn)
                         .map(|(_, c)| *c)
-                        .sum::<usize>(),
+                        .sum::<usize>()
+                        + self
+                            .inbound
+                            .iter()
+                            .filter(|((q, _), _)| q == qn)
+                            .map(|(_, c)| *c)
+                            .sum::<usize>()
+                }
             },
         }
     }
@@ -1172,7 +1188,9 @@ fn value_to_json(val: rusqlite::types::Value) -> serde_json::Value {
         rusqlite::types::Value::Integer(i) => serde_json::json!(i),
         rusqlite::types::Value::Real(f) => serde_json::json!(f),
         rusqlite::types::Value::Text(s) => serde_json::Value::String(s),
-        rusqlite::types::Value::Blob(b) => serde_json::Value::String(format!("<blob {} bytes>", b.len())),
+        rusqlite::types::Value::Blob(b) => {
+            serde_json::Value::String(format!("<blob {} bytes>", b.len()))
+        }
     }
 }
 
@@ -1241,9 +1259,15 @@ mod tests {
             signature: None,
             properties_json: None,
         };
-        store.upsert_symbol(&mk("a.rs::Function::main@L1", "main")).unwrap();
-        store.upsert_symbol(&mk("a.rs::Function::a@L3", "a")).unwrap();
-        store.upsert_symbol(&mk("a.rs::Function::helper@L5", "helper")).unwrap();
+        store
+            .upsert_symbol(&mk("a.rs::Function::main@L1", "main"))
+            .unwrap();
+        store
+            .upsert_symbol(&mk("a.rs::Function::a@L3", "a"))
+            .unwrap();
+        store
+            .upsert_symbol(&mk("a.rs::Function::helper@L5", "helper"))
+            .unwrap();
         store
             .insert_edges_batch(&[
                 Edge {

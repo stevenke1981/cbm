@@ -38,7 +38,12 @@ impl UnionFind {
 pub fn detect_communities(symbols: &[Symbol], edges: &[Edge]) -> CommunityResult {
     let nodes: Vec<String> = symbols
         .iter()
-        .filter(|s| !matches!(s.label.as_str(), "Project" | "Folder" | "File" | "Module" | "Route"))
+        .filter(|s| {
+            !matches!(
+                s.label.as_str(),
+                "Project" | "Folder" | "File" | "Module" | "Route"
+            )
+        })
         .map(|s| s.qualified_name.clone())
         .collect();
     if nodes.is_empty() {

@@ -23,15 +23,12 @@ pub const SKIP_DIRS: &[&str] = &[
 ];
 
 pub const SKIP_SUFFIXES: &[&str] = &[
-    ".pyc", ".pyo", ".exe", ".dll", ".so", ".dylib", ".o", ".a", ".lib",
-    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".svg",
-    ".mp3", ".mp4", ".wav", ".zip", ".tar", ".gz", ".zst",
+    ".pyc", ".pyo", ".exe", ".dll", ".so", ".dylib", ".o", ".a", ".lib", ".png", ".jpg", ".jpeg",
+    ".gif", ".webp", ".ico", ".svg", ".mp3", ".mp4", ".wav", ".zip", ".tar", ".gz", ".zst",
     ".woff", ".woff2", ".ttf", ".eot",
 ];
 
-pub const SKIP_FILENAMES: &[&str] = &[
-    "package-lock.json", "yarn.lock", "go.sum", "Cargo.lock",
-];
+pub const SKIP_FILENAMES: &[&str] = &["package-lock.json", "yarn.lock", "go.sum", "Cargo.lock"];
 
 const CODE_EXTENSIONS: &[&str] = &[
     "rs", "py", "pyi", "js", "mjs", "cjs", "ts", "mts", "cts", "tsx", "jsx", "go", "java", "kt",
@@ -40,8 +37,19 @@ const CODE_EXTENSIONS: &[&str] = &[
 ];
 
 const MODERATE_SKIP_DIRS: &[&str] = &[
-    "tests", "test", "__tests__", "spec", "specs", "docs", "doc", "examples", "example",
-    "fixtures", "testdata", "snapshots", "coverage",
+    "tests",
+    "test",
+    "__tests__",
+    "spec",
+    "specs",
+    "docs",
+    "doc",
+    "examples",
+    "example",
+    "fixtures",
+    "testdata",
+    "snapshots",
+    "coverage",
 ];
 
 const FAST_MAX_BYTES: u64 = 512 * 1024;
@@ -65,36 +73,38 @@ impl IndexMode {
 
 pub fn language_for_path(path: &Path) -> Option<String> {
     let ext = path.extension()?.to_str()?;
-    Some(match ext {
-        "rs" => "rust",
-        "py" | "pyi" => "python",
-        "js" | "mjs" | "cjs" => "javascript",
-        "ts" | "mts" | "cts" => "typescript",
-        "tsx" => "tsx",
-        "jsx" => "jsx",
-        "go" => "go",
-        "java" => "java",
-        "kt" => "kotlin",
-        "c" | "h" => "c",
-        "cpp" | "cc" | "cxx" | "hpp" => "cpp",
-        "cs" => "csharp",
-        "rb" => "ruby",
-        "php" => "php",
-        "swift" => "swift",
-        "zig" => "zig",
-        "lua" => "lua",
-        "sh" | "bash" => "shell",
-        "ps1" => "powershell",
-        "sql" => "sql",
-        "html" | "htm" => "html",
-        "css" | "scss" => "css",
-        "json" => "json",
-        "yaml" | "yml" => "yaml",
-        "toml" => "toml",
-        "md" => "markdown",
-        _ => return None,
-    }
-    .to_string())
+    Some(
+        match ext {
+            "rs" => "rust",
+            "py" | "pyi" => "python",
+            "js" | "mjs" | "cjs" => "javascript",
+            "ts" | "mts" | "cts" => "typescript",
+            "tsx" => "tsx",
+            "jsx" => "jsx",
+            "go" => "go",
+            "java" => "java",
+            "kt" => "kotlin",
+            "c" | "h" => "c",
+            "cpp" | "cc" | "cxx" | "hpp" => "cpp",
+            "cs" => "csharp",
+            "rb" => "ruby",
+            "php" => "php",
+            "swift" => "swift",
+            "zig" => "zig",
+            "lua" => "lua",
+            "sh" | "bash" => "shell",
+            "ps1" => "powershell",
+            "sql" => "sql",
+            "html" | "htm" => "html",
+            "css" | "scss" => "css",
+            "json" => "json",
+            "yaml" | "yml" => "yaml",
+            "toml" => "toml",
+            "md" => "markdown",
+            _ => return None,
+        }
+        .to_string(),
+    )
 }
 
 /// Shared ignore-aware walker for discovery and RLM scan.
@@ -124,7 +134,9 @@ pub fn configure_walker(repo_path: &Path, mode: IndexMode) -> WalkBuilder {
 }
 
 pub fn discover(repo_path: &Path, mode: IndexMode) -> Result<Vec<DiscoveredFile>> {
-    let repo_path = repo_path.canonicalize().unwrap_or_else(|_| repo_path.to_path_buf());
+    let repo_path = repo_path
+        .canonicalize()
+        .unwrap_or_else(|_| repo_path.to_path_buf());
     let mut files = Vec::new();
 
     let walker = configure_walker(&repo_path, mode).build();

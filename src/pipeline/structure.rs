@@ -75,7 +75,10 @@ pub fn build_structure_graph(
             }
         }
 
-        for sym_qn in symbol_qns.iter().filter(|q| q.starts_with(&format!("{rel}::"))) {
+        for sym_qn in symbol_qns
+            .iter()
+            .filter(|q| q.starts_with(&format!("{rel}::")))
+        {
             edges.push(Edge {
                 src_qn: file_qn.clone(),
                 dst_qn: sym_qn.clone(),

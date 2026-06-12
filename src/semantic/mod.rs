@@ -249,11 +249,7 @@ pub fn vector_search(
         };
         let target_tokens = tokenize(&symbol_document(&sym));
         let pair_corpus = Corpus::from_documents(&[query_profile.tokens.clone(), target_tokens]);
-        let target_vec = Vector::from_tokens(
-            &tokenize(&symbol_document(&sym)),
-            &pair_corpus,
-            &qn,
-        );
+        let target_vec = Vector::from_tokens(&tokenize(&symbol_document(&sym)), &pair_corpus, &qn);
         let target_profile = SymbolProfile::from_symbol(&sym);
         let breakdown = signals::score_pair(
             &query_profile,
@@ -396,7 +392,11 @@ mod tests {
         );
         assert!(breakdown.tfidf > 0.2, "tfidf={}", breakdown.tfidf);
         assert!(breakdown.ri > 0.15, "ri={}", breakdown.ri);
-        assert!(breakdown.combined >= 0.30, "combined={}", breakdown.combined);
+        assert!(
+            breakdown.combined >= 0.30,
+            "combined={}",
+            breakdown.combined
+        );
     }
 
     #[test]
@@ -442,11 +442,11 @@ mod tests {
             .collect();
         let edges = compute_semantic_edges(&syms, &vecs, &corpus, &[]);
         assert!(!edges.similar.is_empty() || !edges.related.is_empty());
-        let has_breakdown = edges
-            .similar
-            .iter()
-            .chain(edges.related.iter())
-            .any(|e| e.properties_json.as_ref().is_some_and(|p| p.contains("signals")));
+        let has_breakdown = edges.similar.iter().chain(edges.related.iter()).any(|e| {
+            e.properties_json
+                .as_ref()
+                .is_some_and(|p| p.contains("signals"))
+        });
         assert!(has_breakdown);
     }
 }

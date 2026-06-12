@@ -15,6 +15,18 @@ cargo build --release
 
 Binary: `target/release/cbrlm.exe` (Windows) or `target/release/cbrlm` (Linux/macOS).
 
+### CLI output contract
+
+- `--json` writes machine-readable JSON to **stdout** only.
+- Diagnostics and index progress logs go to **stderr** (normal Unix convention).
+- `--quiet` suppresses tracing logs; use with `--json` in scripts:
+
+```powershell
+cbrlm cli index_repository --json --quiet '{"repo_path":".","project":"x","mode":"fast"}' 2>$null
+```
+
+`rlm_scan` sessions persist under `%LOCALAPPDATA%\codebase-memory-mcp\rlm-sessions` (or `CBRLM_CACHE_DIR`), so `rlm_chunk` works across separate CLI invocations (1h TTL).
+
 ### Test & lint (Section 4 quality gates)
 
 ```powershell
@@ -126,4 +138,4 @@ src/
 
 ## Contributing / next work
 
-Sections 3–5 of [`RUST_REWRITE_TODO.md`](RUST_REWRITE_TODO.md) are complete. Remaining P2/P3: Leiden communities, `HTTP_CALLS`, store bulk transactions, multi-language AST CALLS. Run `.\scripts\smoke-quality-gates.ps1` before claiming a milestone.
+**MVP rewrite complete** (Sections 3–6). **Full reference parity is not** — see [Full parity backlog](PARITY_MATRIX.md#full-parity-backlog) in `PARITY_MATRIX.md`. Run `.\scripts\smoke-quality-gates.ps1` and `.\scripts\smoke-release-artifact.ps1` before release milestones.

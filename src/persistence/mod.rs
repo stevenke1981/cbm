@@ -39,7 +39,10 @@ pub fn export_artifact(repo_path: &Path, project: &str, store: &Store) -> Result
     store.checkpoint_truncate()?;
     let db_path = project_db_path(project);
     if !db_path.is_file() {
-        return Err(Error::Other(format!("database not found: {}", db_path.display())));
+        return Err(Error::Other(format!(
+            "database not found: {}",
+            db_path.display()
+        )));
     }
 
     let raw = fs::read(&db_path)?;
@@ -63,7 +66,10 @@ pub fn export_artifact(repo_path: &Path, project: &str, store: &Store) -> Result
         "symbols": symbols,
         "files": files,
     });
-    fs::write(manifest_path(repo_path), serde_json::to_string_pretty(&manifest)? + "\n")?;
+    fs::write(
+        manifest_path(repo_path),
+        serde_json::to_string_pretty(&manifest)? + "\n",
+    )?;
 
     Ok(dest)
 }
@@ -118,11 +124,7 @@ mod tests {
 
     fn fixture_repo() -> TempDir {
         let dir = TempDir::new().unwrap();
-        fs::write(
-            dir.path().join("main.rs"),
-            "pub fn persist_me() {}\n",
-        )
-        .unwrap();
+        fs::write(dir.path().join("main.rs"), "pub fn persist_me() {}\n").unwrap();
         dir
     }
 

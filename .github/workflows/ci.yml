@@ -50,3 +50,8 @@ jobs:
       - name: smoke graph CLI (Section 4)
         shell: bash
         run: ./scripts/smoke-quality-gates.sh --skip-build
+
+      - name: smoke release artifact (Section 6)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/smoke-release-artifact.ps1 -SkipBuild

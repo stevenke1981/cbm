@@ -47,13 +47,15 @@ pub fn extract_inheritance_edges(
                 "INHERITS",
                 |cap| Some((cap.get(1)?.as_str(), cap.get(2)?.as_str())),
             );
-            if let Ok(re) = Regex::new(
-                r"(?m)^\s*(?:public\s+)?class\s+(\w+)\s+implements\s+([\w,\s]+)",
-            ) {
+            if let Ok(re) =
+                Regex::new(r"(?m)^\s*(?:public\s+)?class\s+(\w+)\s+implements\s+([\w,\s]+)")
+            {
                 for cap in re.captures_iter(content) {
                     let Some(child) = cap.get(1) else { continue };
                     let Some(ifaces) = cap.get(2) else { continue };
-                    let Some(src) = qn_by_name.get(child.as_str()) else { continue };
+                    let Some(src) = qn_by_name.get(child.as_str()) else {
+                        continue;
+                    };
                     for iface in ifaces.as_str().split(',') {
                         let iface = iface.trim();
                         if iface.is_empty() {
@@ -102,8 +104,12 @@ fn extract_pairs<'a>(
 ) {
     let Ok(re) = Regex::new(pattern) else { return };
     for cap in re.captures_iter(ctx.content) {
-        let Some((child, parent)) = names(cap) else { continue };
-        let Some(src) = ctx.qn_by_name.get(child) else { continue };
+        let Some((child, parent)) = names(cap) else {
+            continue;
+        };
+        let Some(src) = ctx.qn_by_name.get(child) else {
+            continue;
+        };
         let dst = resolve_target(parent, ctx.qn_by_name, ctx.file_path);
         push_edge(edge_type, src, &dst, ctx.edges, ctx.seen);
     }
@@ -116,17 +122,18 @@ fn extract_decorators(
     edges: &mut Vec<Edge>,
     seen: &mut HashSet<(String, String, String)>,
 ) {
-    let Ok(re) = Regex::new(r"(?m)^\s*#?\[?@([\w.:]+)") else { return };
+    let Ok(re) = Regex::new(r"(?m)^\s*#?\[?@([\w.:]+)") else {
+        return;
+    };
     for cap in re.captures_iter(content) {
-        let Some(decorator) = cap.get(1) else { continue };
+        let Some(decorator) = cap.get(1) else {
+            continue;
+        };
         let line = line_number(content, cap.get(0).unwrap().start());
         let Some(target) = symbol_at_line(symbols, file_path, line + 1) else {
             continue;
         };
-        let dst = format!(
-            "{file_path}::Decorator::{}@L{line}",
-            decorator.as_str()
-        );
+        let dst = format!("{file_path}::Decorator::{}@L{line}", decorator.as_str());
         push_edge("DECORATES", &target, &dst, edges, seen);
     }
 }
@@ -198,9 +205,14 @@ mod tests {
     #[test]
     fn extracts_python_inherits() {
         let src = "class Child(Parent):\n    pass\n";
-        let symbols = vec![sym("m.py", "Child", "Class", 1), sym("m.py", "Parent", "Class", 10)];
+        let symbols = vec![
+            sym("m.py", "Child", "Class", 1),
+            sym("m.py", "Parent", "Class", 10),
+        ];
         let edges = extract_inheritance_edges("m.py", "python", src, &symbols);
-        assert!(edges.iter().any(|e| e.edge_type == "INHERITS" && e.src_qn.contains("Child")));
+        assert!(edges
+            .iter()
+            .any(|e| e.edge_type == "INHERITS" && e.src_qn.contains("Child")));
     }
 
     #[test]

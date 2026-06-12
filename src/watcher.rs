@@ -95,10 +95,7 @@ impl Watcher {
                 interval_ms: s.interval_ms,
                 last_dirty_signature: s.last_dirty_signature.clone(),
                 last_head: s.last_head.clone(),
-                next_poll_in_ms: s
-                    .next_poll_at
-                    .saturating_duration_since(now)
-                    .as_millis() as u64,
+                next_poll_in_ms: s.next_poll_at.saturating_duration_since(now).as_millis() as u64,
             })
             .collect()
     }
@@ -269,11 +266,7 @@ fn status_signature(git: &GitStatus, changed: &[String]) -> String {
     format!("{head}:{}", changed.join(","))
 }
 
-fn should_reindex(
-    state: &WatchState,
-    git: &GitStatus,
-    signature: &str,
-) -> bool {
+fn should_reindex(state: &WatchState, git: &GitStatus, signature: &str) -> bool {
     if state.last_dirty_signature.as_deref() == Some(signature) {
         return false;
     }

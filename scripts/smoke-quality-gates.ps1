@@ -43,6 +43,14 @@ function Invoke-CbrlmCli([string[]]$CliArgs) {
     return $out
 }
 
+function Invoke-CbrlmCliStdout([string[]]$CliArgs) {
+    $out = & $Bin @CliArgs 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        throw "cbrlm cli failed: $($CliArgs -join ' ')"
+    }
+    return ($out | Out-String).Trim()
+}
+
 Write-Host "==> smoke: index_repository" -ForegroundColor Cyan
 $indexOut = Invoke-CbrlmCli @(
     'cli', 'index_repository', '--json',
@@ -65,6 +73,20 @@ $archOut = Invoke-CbrlmCli @(
 )
 foreach ($edge in @("CALLS", "CONTAINS", "IMPORTS")) {
     if ($archOut -notmatch $edge) { throw "get_architecture missing edge type $edge" }
+}
+
+Write-Host "==> smoke: query_graph edge diversity" -ForegroundColor Cyan
+$queryOut = Invoke-CbrlmCliStdout @(
+    'cli', 'query_graph', '--json', '--quiet',
+    '{"project":"smoke-review","query":"SELECT edge_type, COUNT(*) AS count FROM edges GROUP BY edge_type"}'
+)
+try {
+    $null = $queryOut | ConvertFrom-Json
+} catch {
+    throw "query_graph stdout is not valid JSON: $queryOut"
+}
+foreach ($edge in @("CALLS", "CONTAINS", "IMPORTS")) {
+    if ($queryOut -notmatch $edge) { throw "query_graph missing edge type $edge" }
 }
 
 Write-Host "Section 4 quality gates passed." -ForegroundColor Green

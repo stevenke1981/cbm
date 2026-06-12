@@ -187,4 +187,3 @@ pub fn node_detail(project: &str, qn: &str) -> Result<Option<NodeDetailPayload>>
         outbound,
     }))
 }
-

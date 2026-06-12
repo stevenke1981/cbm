@@ -88,6 +88,11 @@ jobs:
           $bin = "target/${{ matrix.target }}/release/cbrlm.exe"
           ./scripts/package-artifact.ps1 "${{ matrix.artifact }}" $bin
 
+      - name: Smoke release artifact (Windows)
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: ./scripts/smoke-release-artifact.ps1 -SkipBuild
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:

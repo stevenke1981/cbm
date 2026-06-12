@@ -63,4 +63,11 @@ for edge in CALLS CONTAINS IMPORTS; do
   echo "$arch_out" | grep -q "$edge"
 done
 
+echo "==> smoke: query_graph edge diversity"
+query_out="$("$BIN" cli query_graph --json --quiet '{"project":"smoke-review","query":"SELECT edge_type, COUNT(*) AS count FROM edges GROUP BY edge_type"}' 2>/dev/null)"
+echo "$query_out" | python3 -c "import json,sys; json.load(sys.stdin)" 2>/dev/null || echo "$query_out" | python -c "import json,sys; json.load(sys.stdin)"
+for edge in CALLS CONTAINS IMPORTS; do
+  echo "$query_out" | grep -q "$edge"
+done
+
 echo "Section 4 quality gates passed."

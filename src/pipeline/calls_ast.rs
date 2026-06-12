@@ -37,10 +37,7 @@ pub fn resolve_calls_rust_ast(
     let mut edges = Vec::new();
     let mut seen = std::collections::HashSet::new();
 
-    let functions: Vec<&Symbol> = symbols
-        .iter()
-        .filter(|s| s.label == "Function")
-        .collect();
+    let functions: Vec<&Symbol> = symbols.iter().filter(|s| s.label == "Function").collect();
 
     for sym in functions {
         let body_start = sym.line_start.saturating_sub(1) as usize;
@@ -81,9 +78,7 @@ pub fn resolve_calls_rust_ast(
                         src_qn: key.0,
                         dst_qn: key.1,
                         edge_type: "CALLS".into(),
-                        properties_json: Some(
-                            r#"{"confidence":"high","method":"ast"}"#.into(),
-                        ),
+                        properties_json: Some(r#"{"confidence":"high","method":"ast"}"#.into()),
                     });
                 }
             }

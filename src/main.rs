@@ -3,7 +3,11 @@ use clap::{Parser, Subcommand};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Parser)]
-#[command(name = "cbrlm", version, about = "Codebase RLM Memory MCP — Rust knowledge graph server")]
+#[command(
+    name = "cbrlm",
+    version,
+    about = "Codebase RLM Memory MCP — Rust knowledge graph server"
+)]
 struct Args {
     #[command(subcommand)]
     command: Option<Command>,
@@ -24,6 +28,9 @@ enum Command {
         tool: String,
         #[arg(long)]
         json: bool,
+        /// Suppress diagnostic logs (stdout/json only for CLI tools)
+        #[arg(long)]
+        quiet: bool,
         args: Option<String>,
     },
     /// Install binary and configure MCP for coding agents
@@ -53,9 +60,7 @@ enum Command {
     /// Print SessionStart reminder to stdout
     HookSessionStart,
     /// Config utilities
-    Config {
-        action: String,
-    },
+    Config { action: String },
     /// HTTP graph UI only (no MCP stdio)
     Ui {
         #[arg(long, default_value_t = 9749)]
@@ -64,32 +69,48 @@ enum Command {
 }
 
 fn main() {
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env().add_directive("cbrlm=info".parse().unwrap()))
-        .with_writer(std::io::stderr)
-        .init();
-
     let args = Args::parse();
 
+    let cli_quiet = matches!(&args.command, Some(Command::Cli { quiet: true, .. }));
+    if !cli_quiet {
+        tracing_subscriber::fmt()
+            .with_env_filter(
+                EnvFilter::from_default_env().add_directive("cbrlm=info".parse().unwrap()),
+            )
+            .with_writer(std::io::stderr)
+            .init();
+    }
+
     let result = match args.command {
-        Some(Command::Cli { tool, json, args }) => cli::run_cli(&tool, args.as_deref(), json),
-        Some(Command::Install { dry_run, force, yes, all }) => {
-            cli::run_install(cbrlm::install::InstallOptions {
-                dry_run,
-                force,
-                yes,
-                all_agents: all,
-                binary: None,
-            })
-        }
-        Some(Command::Uninstall { dry_run, yes, all, keep_binary }) => {
-            cli::run_uninstall(cbrlm::install::UninstallOptions {
-                dry_run,
-                yes,
-                all_agents: all,
-                keep_binary,
-            })
-        }
+        Some(Command::Cli {
+            tool,
+            json,
+            quiet,
+            args,
+        }) => cli::run_cli(&tool, args.as_deref(), json, quiet),
+        Some(Command::Install {
+            dry_run,
+            force,
+            yes,
+            all,
+        }) => cli::run_install(cbrlm::install::InstallOptions {
+            dry_run,
+            force,
+            yes,
+            all_agents: all,
+            binary: None,
+        }),
+        Some(Command::Uninstall {
+            dry_run,
+            yes,
+            all,
+            keep_binary,
+        }) => cli::run_uninstall(cbrlm::install::UninstallOptions {
+            dry_run,
+            yes,
+            all_agents: all,
+            keep_binary,
+        }),
         Some(Command::HookAugment) => {
             cli::run_hook_augment();
             Ok(())

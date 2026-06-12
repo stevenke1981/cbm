@@ -65,7 +65,9 @@ impl Pipeline {
 
     pub fn run(&self, repo_path: &Path, project: Option<&str>) -> Result<IndexResult> {
         let start = Instant::now();
-        let repo_path = repo_path.canonicalize().unwrap_or_else(|_| repo_path.to_path_buf());
+        let repo_path = repo_path
+            .canonicalize()
+            .unwrap_or_else(|_| repo_path.to_path_buf());
         let project_name = match project {
             Some(p) => normalize_project_name(p),
             None => project_name_from_path(&repo_path),
@@ -80,7 +82,9 @@ impl Pipeline {
         changed_files: &[String],
     ) -> Result<IndexResult> {
         let start = Instant::now();
-        let repo_path = repo_path.canonicalize().unwrap_or_else(|_| repo_path.to_path_buf());
+        let repo_path = repo_path
+            .canonicalize()
+            .unwrap_or_else(|_| repo_path.to_path_buf());
         let project_name = normalize_project_name(project);
 
         if changed_files.is_empty() {
@@ -148,12 +152,10 @@ impl Pipeline {
             store.set_meta("git_head", &h)?;
         }
         store.set_meta("index_mode", &format!("{:?}", self.mode).to_lowercase())?;
-        store.set_meta(
-            "semantic_enabled",
-            &semantic::is_enabled().to_string(),
-        )?;
+        store.set_meta("semantic_enabled", &semantic::is_enabled().to_string())?;
         store.checkpoint()?;
-        let artifact_path = maybe_export_artifact(&repo_path, &project_name, &store, self.export_artifact)?;
+        let artifact_path =
+            maybe_export_artifact(&repo_path, &project_name, &store, self.export_artifact)?;
 
         let duration_ms = start.elapsed().as_millis() as u64;
         Ok(IndexResult {
@@ -180,7 +182,9 @@ impl Pipeline {
         project: Option<&str>,
         incremental: bool,
     ) -> Result<IndexResult> {
-        let repo_path = repo_path.canonicalize().unwrap_or_else(|_| repo_path.to_path_buf());
+        let repo_path = repo_path
+            .canonicalize()
+            .unwrap_or_else(|_| repo_path.to_path_buf());
         let project_name = match project {
             Some(p) => normalize_project_name(p),
             None => project_name_from_path(&repo_path),
@@ -274,12 +278,10 @@ impl Pipeline {
 
         store.upsert_symbols_batch(&all_symbols)?;
         let (call_edges, semantic) = finalize_index(&store, repo_path, project_name, self.mode)?;
-        store.set_meta(
-            "semantic_enabled",
-            &semantic::is_enabled().to_string(),
-        )?;
+        store.set_meta("semantic_enabled", &semantic::is_enabled().to_string())?;
         store.checkpoint()?;
-        let artifact_path = maybe_export_artifact(repo_path, project_name, &store, self.export_artifact)?;
+        let artifact_path =
+            maybe_export_artifact(repo_path, project_name, &store, self.export_artifact)?;
 
         let duration_ms = start.elapsed().as_millis() as u64;
         info!(
@@ -385,7 +387,9 @@ fn finalize_index(
 
     let symbols_by_file: HashMap<String, Vec<Symbol>> =
         code_symbols.iter().fold(HashMap::new(), |mut acc, sym| {
-            acc.entry(sym.file_path.clone()).or_default().push(sym.clone());
+            acc.entry(sym.file_path.clone())
+                .or_default()
+                .push(sym.clone());
             acc
         });
 
@@ -445,7 +449,10 @@ fn finalize_index(
     let mut updated_symbols = code_symbols.clone();
     apply_community_properties(&mut updated_symbols, &community_result);
     store.upsert_symbols_batch(&updated_symbols)?;
-    store.set_meta("community_count", &community_result.community_count.to_string())?;
+    store.set_meta(
+        "community_count",
+        &community_result.community_count.to_string(),
+    )?;
 
     Ok((edge_count, semantic))
 }
@@ -455,7 +462,9 @@ fn rebuild_call_edges(store: &Store, code_symbols: &[Symbol]) -> Result<Vec<Edge
     let files = store.list_files()?;
     let symbols_by_file: HashMap<String, Vec<Symbol>> =
         code_symbols.iter().fold(HashMap::new(), |mut acc, sym| {
-            acc.entry(sym.file_path.clone()).or_default().push(sym.clone());
+            acc.entry(sym.file_path.clone())
+                .or_default()
+                .push(sym.clone());
             acc
         });
 

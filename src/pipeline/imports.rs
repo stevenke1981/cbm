@@ -5,13 +5,14 @@ use std::collections::HashSet;
 pub fn extract_import_edges(file_path: &str, language: &str, content: &str) -> Vec<Edge> {
     let patterns: &[&str] = match language {
         "rust" => &[r"(?m)^\s*use\s+([\w:]+)", r"(?m)^\s*mod\s+(\w+)"],
-        "python" => &[r"(?m)^\s*from\s+([\w.]+)\s+import", r"(?m)^\s*import\s+([\w.]+)"],
-        "javascript" | "typescript" | "tsx" | "jsx" => {
-            &[
-                r#"(?m)^\s*import\s+.*?from\s+['"]([^'"]+)['"]"#,
-                r#"(?m)require\(['"]([^'"]+)['"]\)"#,
-            ]
-        }
+        "python" => &[
+            r"(?m)^\s*from\s+([\w.]+)\s+import",
+            r"(?m)^\s*import\s+([\w.]+)",
+        ],
+        "javascript" | "typescript" | "tsx" | "jsx" => &[
+            r#"(?m)^\s*import\s+.*?from\s+['"]([^'"]+)['"]"#,
+            r#"(?m)require\(['"]([^'"]+)['"]\)"#,
+        ],
         "go" => &[r#"(?m)^\s*import\s+"([^"]+)""#, r#"(?m)^\s*import\s+(\w+)"#],
         _ => &[],
     };

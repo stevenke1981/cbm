@@ -77,7 +77,11 @@ pub fn run_install(opts: &InstallOptions) -> Result<InstallReport> {
     let dest = installed_binary_path();
 
     if opts.dry_run {
-        eprintln!("[dry-run] would copy {} → {}", source.display(), dest.display());
+        eprintln!(
+            "[dry-run] would copy {} → {}",
+            source.display(),
+            dest.display()
+        );
     } else {
         install_binary(&source, &dest)?;
         eprintln!("installed binary → {}", dest.display());
@@ -193,7 +197,10 @@ fn resolve_source_binary(override_path: Option<&Path>) -> Result<PathBuf> {
         if path.is_file() {
             return Ok(path.to_path_buf());
         }
-        return Err(Error::Other(format!("binary not found: {}", path.display())));
+        return Err(Error::Other(format!(
+            "binary not found: {}",
+            path.display()
+        )));
     }
     let current = std::env::current_exe()?;
     if current.is_file() {
@@ -535,7 +542,10 @@ const HOOK_SESSION_SH: &str = include_str!("../../hooks/cbrlm-session-reminder.s
 
 fn install_hooks(binary: &Path, opts: &InstallOptions) -> Result<bool> {
     if opts.dry_run {
-        eprintln!("[dry-run] would install hook scripts to {}", hooks_dir().display());
+        eprintln!(
+            "[dry-run] would install hook scripts to {}",
+            hooks_dir().display()
+        );
         configure_claude_hooks(binary, opts)?;
         configure_codex_hooks(opts)?;
         return Ok(true);
@@ -589,7 +599,10 @@ fn install_hooks(binary: &Path, opts: &InstallOptions) -> Result<bool> {
 fn configure_claude_hooks(binary: &Path, opts: &InstallOptions) -> Result<()> {
     let settings = claude_settings_path();
     if opts.dry_run {
-        eprintln!("[dry-run] would configure Claude hooks in {}", settings.display());
+        eprintln!(
+            "[dry-run] would configure Claude hooks in {}",
+            settings.display()
+        );
         return Ok(());
     }
     let gate = hook_command(binary, "cbrlm-code-discovery-gate");
@@ -602,7 +615,10 @@ fn configure_codex_hooks(opts: &InstallOptions) -> Result<()> {
         .map(|h| h.join(".codex").join("config.toml"))
         .ok_or_else(|| Error::Other("home directory not found".into()))?;
     if opts.dry_run {
-        eprintln!("[dry-run] would configure Codex SessionStart hooks in {}", config.display());
+        eprintln!(
+            "[dry-run] would configure Codex SessionStart hooks in {}",
+            config.display()
+        );
         return Ok(());
     }
     if config.exists() {

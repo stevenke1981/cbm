@@ -21,7 +21,9 @@ pub fn read_message<R: BufRead>(reader: &mut R) -> Result<Option<String>> {
     if let Some(len) = parse_content_length(&headers) {
         let mut body = vec![0u8; len];
         reader.read_exact(&mut body)?;
-        return Ok(Some(String::from_utf8(body).map_err(|e| Error::Other(e.to_string()))?));
+        return Ok(Some(
+            String::from_utf8(body).map_err(|e| Error::Other(e.to_string()))?,
+        ));
     }
 
     // Fallback: first non-header line was already consumed; try newline JSON
