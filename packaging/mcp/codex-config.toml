@@ -1,7 +1,7 @@
-[mcp_servers.codebase-memory-mcp]
+[mcp_servers.cbrlm-mcp]
 command = "{{CBRLM_BINARY}}"
 args = []
 
-[mcp_servers.codebase-memory-mcp.env]
+[mcp_servers.cbrlm-mcp.env]
 CBRLM_PROJECT_PREFIX = "cbrlm+"
 CBRLM_AGENT = "codex"

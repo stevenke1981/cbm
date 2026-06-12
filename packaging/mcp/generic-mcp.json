@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "codebase-memory-mcp": {
+    "cbrlm-mcp": {
       "command": "{{CBRLM_BINARY}}",
       "args": [],
       "env": {

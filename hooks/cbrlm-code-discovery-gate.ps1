@@ -1,4 +1,4 @@
-# codebase-memory-mcp search augmenter (Claude Code PreToolUse).
+# cbrlm-mcp search augmenter (Claude Code PreToolUse).
 # NEVER blocks a tool call — only adds graph context. Failures are silent (exit 0).
 param()
 $ErrorActionPreference = "SilentlyContinue"

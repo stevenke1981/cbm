@@ -37,7 +37,7 @@ pub fn default_cache_dir() -> PathBuf {
     }
     dirs::cache_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join("codebase-memory-mcp")
+        .join("cbrlm-mcp")
 }
 
 pub fn project_db_path(project: &str) -> PathBuf {

@@ -1,4 +1,4 @@
-# Install cbrlm (codebase-memory-mcp) — build, copy binary, configure agents.
+# Install cbrlm (cbrlm-mcp) — build, copy binary, configure agents.
 #
 # Usage:
 #   .\scripts\install.ps1
@@ -45,5 +45,5 @@ if ($LASTEXITCODE -ne 0) { throw "cbrlm install failed" }
 
 Write-Host ""
 Write-Host "Done! Restart your coding agent." -ForegroundColor Green
-Write-Host "MCP server: codebase-memory-mcp" -ForegroundColor DarkGray
+Write-Host "MCP server: cbrlm-mcp" -ForegroundColor DarkGray
 Write-Host "Binary:     $BuiltBinary" -ForegroundColor DarkGray

@@ -1,9 +1,11 @@
 # CBRLM MCP package
 
-This directory is the handoff package for agents and MCP clients that want to use CBRLM as `codebase-memory-mcp`.
+This directory is the handoff package for agents and MCP clients that want to use CBRLM as `cbrlm-mcp`.
 
-Server name: `codebase-memory-mcp`  
-Transport: stdio  
+Server name: `cbrlm-mcp`
+
+Transport: stdio
+
 Binary: `cbrlm` or an absolute path to `cbrlm.exe` / `cbrlm`
 
 ## Fast path

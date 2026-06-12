@@ -72,7 +72,7 @@ impl AgentKind {
             .unwrap_or_else(|_| "cbrlm".into());
         serde_json::json!({
             "mcpServers": {
-                "codebase-memory-mcp": {
+                "cbrlm-mcp": {
                     "command": bin,
                     "args": [],
                     "env": {

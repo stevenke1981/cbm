@@ -134,7 +134,7 @@ pub fn run_uninstall(opts: &UninstallOptions) -> Result<UninstallReport> {
     let mut removed = Vec::new();
     let mut skipped = Vec::new();
 
-    if !opts.yes && !opts.dry_run && !confirm("uninstall codebase-memory-mcp integration?")? {
+    if !opts.yes && !opts.dry_run && !confirm("uninstall cbrlm-mcp integration?")? {
         eprintln!("cancelled");
         return Ok(UninstallReport { removed, skipped });
     }
@@ -1007,10 +1007,10 @@ mod tests {
 
     #[test]
     fn removes_existing_codex_section() {
-        let input = "model = \"gpt\"\n\n[mcp_servers.codebase-memory-mcp]\ncommand = \"old\"\n\n[features]\nhooks = true\n";
+        let input = "model = \"gpt\"\n\n[mcp_servers.cbrlm-mcp]\ncommand = \"old\"\n\n[features]\nhooks = true\n";
         let out = remove_codex_mcp_section(input, MCP_SERVER_NAME);
         assert!(!out.contains("old"));
-        assert!(!out.contains("[mcp_servers.codebase-memory-mcp]"));
+        assert!(!out.contains("[mcp_servers.cbrlm-mcp]"));
         assert!(out.contains("model = \"gpt\""));
         assert!(out.contains("[features]"));
     }

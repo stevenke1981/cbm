@@ -1,4 +1,4 @@
-# SessionStart hook: remind agent to use codebase-memory-mcp (CBRLM) tools.
+# SessionStart hook: remind agent to use cbrlm-mcp (CBRLM) tools.
 param()
 $ErrorActionPreference = "SilentlyContinue"
 $bin = if ($env:CBRLM_BIN) { $env:CBRLM_BIN } else { "{{CBRLM_BIN}}" }
@@ -6,7 +6,7 @@ if (Test-Path $bin) {
     & $bin hook-session-start
 } else {
     @"
-CRITICAL - Code Discovery Protocol (CBRLM / codebase-memory-mcp):
+CRITICAL - Code Discovery Protocol (CBRLM / cbrlm-mcp):
 1. ALWAYS use cbrlm MCP tools FIRST for code exploration:
    - search_graph / rlm_filter to find functions, classes, routes
    - trace_path for call chains and data flow

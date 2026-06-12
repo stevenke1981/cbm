@@ -1,6 +1,6 @@
 {
   "mcp": {
-    "codebase-memory-mcp": {
+    "cbrlm-mcp": {
       "type": "local",
       "command": [
         "{{CBRLM_BINARY}}"

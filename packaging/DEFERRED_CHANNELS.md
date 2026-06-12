@@ -2,7 +2,7 @@
 
 CBRLM currently ships via **install scripts**, **GitHub Releases** (multi-platform binaries + `SHA256SUMS.txt`), **Homebrew**, **Scoop**, and **Winget**.
 
-The reference `codebase-memory-mcp` project also lists these channels. They are **intentionally deferred** for the Rust rewrite until wrapper maintenance is automated:
+The reference `cbrlm-mcp` project also lists these channels. They are **intentionally deferred** for the Rust rewrite until wrapper maintenance is automated:
 
 | Channel | Status | Notes |
 |---------|--------|-------|

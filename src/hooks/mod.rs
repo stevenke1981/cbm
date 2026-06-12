@@ -16,22 +16,22 @@ const MAX_WALKUP: usize = 8;
 const DEADLINE_MS: u64 = 300;
 
 pub const SESSION_REMINDER: &str = "\
-CRITICAL - Code Discovery Protocol (CBRLM / codebase-memory-mcp):
+CRITICAL - Code Discovery Protocol (CBRLM / cbrlm-mcp):
 1. ALWAYS use cbrlm MCP tools FIRST for code exploration:
    - search_graph / rlm_filter to find functions, classes, routes
    - trace_path for call chains and data flow
    - rlm_read_symbol / get_code_snippet for exact symbol source
    - rlm_scan / rlm_peek / rlm_chunk for logs and huge non-code files
    - rlm_workflow for map-reduce phases
-2. Project names use cbrlm+ prefix; shares ~/.cache/codebase-memory-mcp with upstream CBM.
+2. Project names use cbrlm+ prefix; shares ~/.cache/cbrlm-mcp with upstream CBM.
 3. Use Grep/Glob/Read freely for text, configs, and non-code files; always Read a file before editing it.
 4. If the project is not indexed yet, run index_repository FIRST.";
 
 pub const CODEX_SESSION_REMINDER_CMD: &str = "\
-echo \"Code discovery: prefer codebase-memory-mcp (search_graph, trace_path, rlm_filter, rlm_read_symbol) over grep/file-read; projects use cbrlm+ prefix; run index_repository first if not indexed.\"";
+echo \"Code discovery: prefer cbrlm-mcp (search_graph, trace_path, rlm_filter, rlm_read_symbol) over grep/file-read; projects use cbrlm+ prefix; run index_repository first if not indexed.\"";
 
-pub const CODEX_HOOK_BEGIN: &str = "# >>> codebase-memory-mcp SessionStart >>>";
-pub const CODEX_HOOK_END: &str = "# <<< codebase-memory-mcp SessionStart <<<";
+pub const CODEX_HOOK_BEGIN: &str = "# >>> cbrlm-mcp SessionStart >>>";
+pub const CODEX_HOOK_END: &str = "# <<< cbrlm-mcp SessionStart <<<";
 
 pub fn hook_session_start() -> i32 {
     print!("{SESSION_REMINDER}");
@@ -242,6 +242,6 @@ mod tests {
 
     #[test]
     fn session_reminder_mentions_server() {
-        assert!(SESSION_REMINDER.contains("codebase-memory-mcp"));
+        assert!(SESSION_REMINDER.contains("cbrlm-mcp"));
     }
 }

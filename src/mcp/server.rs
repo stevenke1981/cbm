@@ -6,7 +6,7 @@ use crate::watcher::Watcher;
 use serde_json::{json, Value};
 use std::sync::Arc;
 
-pub const SERVER_NAME: &str = "codebase-memory-mcp";
+pub const SERVER_NAME: &str = "cbrlm-mcp";
 pub const SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub struct McpServer {
@@ -181,7 +181,7 @@ mod tests {
             "params": {}
         });
         let resp = server.handle_message(&req.to_string()).unwrap().unwrap();
-        assert!(resp.contains("codebase-memory-mcp"));
+        assert!(resp.contains("cbrlm-mcp"));
     }
 
     #[test]

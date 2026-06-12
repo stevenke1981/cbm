@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# SessionStart hook: remind agent to use codebase-memory-mcp (CBRLM) tools.
+# SessionStart hook: remind agent to use cbrlm-mcp (CBRLM) tools.
 set -euo pipefail
 BIN="${CBRLM_BIN:-{{CBRLM_BIN}}}"
 if [ -x "$BIN" ]; then
   "$BIN" hook-session-start
 else
   cat << 'REMINDER'
-CRITICAL - Code Discovery Protocol (CBRLM / codebase-memory-mcp):
+CRITICAL - Code Discovery Protocol (CBRLM / cbrlm-mcp):
 1. ALWAYS use cbrlm MCP tools FIRST for code exploration:
    - search_graph / rlm_filter to find functions, classes, routes
    - trace_path for call chains and data flow

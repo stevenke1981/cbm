@@ -2,7 +2,7 @@
 
 CBRLM is a Rust MCP server and CLI for indexing codebases into a local knowledge graph for AI coding agents. It is designed for OpenCode, Codex, Claude Code, and other MCP-capable developer tools.
 
-This repository is a Rust MVP rewrite of `codebase-memory-mcp`. It is usable for agent workflows today, but it is not a full reference replica. SQLite is the canonical store in this Rust version; FoundationDB is intentionally omitted.
+This repository is a Rust MVP rewrite of `cbrlm-mcp`. It is usable for agent workflows today, but it is not a full reference replica. SQLite is the canonical store in this Rust version; FoundationDB is intentionally omitted.
 
 Reference material: [`../knowledge-graph/`](../knowledge-graph/)
 
@@ -110,7 +110,7 @@ OpenCode notes:
 
 - Existing `.config\opencode\opencode.jsonc` and `.config\opencode\opencode.json` files are detected even when the current shell cannot identify itself as OpenCode.
 - Existing `mcp.cbm` entries are updated in place to the stable binary path.
-- New OpenCode configs use the MCP server name `codebase-memory-mcp`.
+- New OpenCode configs use the MCP server name `cbrlm-mcp`.
 
 Platform helper scripts:
 
@@ -119,7 +119,7 @@ Platform helper scripts:
 
 ### Package As MCP For Other Agents
 
-CBRLM is packaged as the MCP server `codebase-memory-mcp`.
+CBRLM is packaged as the MCP server `cbrlm-mcp`.
 
 Automatic install:
 
@@ -230,7 +230,7 @@ For Linux/macOS-only edits, use the `.sh` smoke script where appropriate.
 cbrlm cli index_repository --json --quiet '{"repo_path":".","project":"x","mode":"fast"}' 2>$null
 ```
 
-`rlm_scan` sessions persist under `%LOCALAPPDATA%\codebase-memory-mcp\rlm-sessions` or `CBRLM_CACHE_DIR`, so `rlm_chunk` works across separate CLI invocations.
+`rlm_scan` sessions persist under `%LOCALAPPDATA%\cbrlm-mcp\rlm-sessions` or `CBRLM_CACHE_DIR`, so `rlm_chunk` works across separate CLI invocations.
 
 ## Environment Variables
 

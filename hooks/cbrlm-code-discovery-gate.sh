@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# codebase-memory-mcp search augmenter (Claude Code PreToolUse).
+# cbrlm-mcp search augmenter (Claude Code PreToolUse).
 # NEVER blocks — only adds graph context. Failures are silent (exit 0).
 set -euo pipefail
 BIN="${CBRLM_BIN:-{{CBRLM_BIN}}}"

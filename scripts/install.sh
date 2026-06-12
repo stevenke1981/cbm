@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install cbrlm (codebase-memory-mcp) — build, copy binary, configure agents.
+# Install cbrlm (cbrlm-mcp) — build, copy binary, configure agents.
 #
 # Usage:
 #   ./scripts/install.sh
@@ -45,5 +45,5 @@ echo -e "${GRAY}Running cbrlm install...${NC}"
 
 echo ""
 echo -e "${GREEN}Done! Restart your coding agent.${NC}"
-echo -e "${GRAY}MCP server: codebase-memory-mcp${NC}"
+echo -e "${GRAY}MCP server: cbrlm-mcp${NC}"
 echo -e "${GRAY}Binary:     $BINARY${NC}"

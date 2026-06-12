@@ -1,7 +1,7 @@
 # Rust Rewrite TODO
 
 This file translates the current review findings into an implementation TODO list
-for agents working on the Rust rewrite of `codebase-memory-mcp`.
+for agents working on the Rust rewrite of `cbrlm-mcp`.
 
 Reference material:
 
