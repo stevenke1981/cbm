@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CBRLM Graph UI</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #0d1117; color: #e6edf3; overflow: hidden; }
+    #canvas-wrap { width: 100vw; height: 100vh; }
+    #sidebar {
+      position: fixed; top: 0; left: 0; width: 300px; height: 100vh;
+      background: rgba(13,17,23,0.92); border-right: 1px solid #30363d;
+      padding: 16px; overflow-y: auto; z-index: 10;
+    }
+    h1 { font-size: 1rem; margin-bottom: 12px; color: #58a6ff; }
+    label { display: block; font-size: 0.8rem; color: #8b949e; margin: 8px 0 4px; }
+    select, button {
+      width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #30363d;
+      background: #161b22; color: #e6edf3; margin-bottom: 8px;
+    }
+    button { cursor: pointer; background: #238636; border-color: #238636; }
+    button:hover { background: #2ea043; }
+    #stats { font-size: 0.8rem; line-height: 1.6; color: #8b949e; margin-top: 12px; }
+    #tooltip {
+      position: fixed; display: none; background: #161b22; border: 1px solid #30363d;
+      padding: 8px 12px; border-radius: 6px; font-size: 0.75rem; pointer-events: none; z-index: 20;
+    }
+    .legend { margin-top: 12px; }
+    .legend span { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+  </style>
+</head>
+<body>
+  <div id="sidebar">
+    <h1>CBRLM Knowledge Graph</h1>
+    <label>Project</label>
+    <select id="project-select"><option value="">Loading…</option></select>
+    <button id="reload-btn">Reload Graph</button>
+    <label>Search symbols</label>
+    <input id="search-input" type="text" placeholder="query…" style="width:100%;padding:8px;border-radius:6px;border:1px solid #30363d;background:#161b22;color:#e6edf3;margin-bottom:8px" />
+    <div id="search-results" style="font-size:0.75rem;max-height:120px;overflow-y:auto;margin-bottom:8px"></div>
+    <div id="node-detail" style="font-size:0.75rem;line-height:1.5;margin-bottom:8px;padding:8px;border:1px solid #30363d;border-radius:6px;display:none"></div>
+    <label>Edge types</label>
+    <div id="edge-filters" style="font-size:0.75rem;line-height:1.8"></div>
+    <div id="stats"></div>
+    <div class="legend">
+      <div><span style="background:#4fc3f7"></span>Function</div>
+      <div><span style="background:#81c784"></span>Class</div>
+      <div><span style="background:#ffb74d"></span>Module</div>
+      <div><span style="background:#90a4ae"></span>File / Folder</div>
+    </div>
+  </div>
+  <div id="canvas-wrap"></div>
+  <div id="tooltip"></div>
+
+  <script type="importmap">
+  { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }
+  </script>
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    const wrap = document.getElementById('canvas-wrap');
+    const tooltip = document.getElementById('tooltip');
+    const statsEl = document.getElementById('stats');
+    const projectSelect = document.getElementById('project-select');
+    const edgeFiltersEl = document.getElementById('edge-filters');
+    const EDGE_TYPES = ['CALLS','IMPORTS','CONTAINS','INHERITS','IMPLEMENTS','DECORATES','HTTP_ROUTE','SIMILAR_TO','SEMANTICALLY_RELATED'];
+    const EDGE_COLORS = { CALLS:0x58a6ff, IMPORTS:0xffb74d, CONTAINS:0x484f58, INHERITS:0x81c784, IMPLEMENTS:0xba68c8, DECORATES:0xf778ba, HTTP_ROUTE:0xff8a65, SIMILAR_TO:0xbc8cff, SEMANTICALLY_RELATED:0xbc8cff };
+    const searchInput = document.getElementById('search-input');
+    const searchResults = document.getElementById('search-results');
+    const nodeDetail = document.getElementById('node-detail');
+    const edgeColor = (e) => e.color ?? EDGE_COLORS[e.edge_type] ?? 0x484f58;
+    const enabledEdges = new Set(EDGE_TYPES);
+    EDGE_TYPES.forEach(t => {
+      const id = 'edge-' + t;
+      const row = document.createElement('label');
+      row.style.display = 'block';
+      row.innerHTML = `<input type="checkbox" id="${id}" checked> ${t}`;
+      edgeFiltersEl.appendChild(row);
+      document.getElementById(id).onchange = (e) => {
+        if (e.target.checked) enabledEdges.add(t); else enabledEdges.delete(t);
+        loadGraph();
+      };
+    });
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0d1117);
+    const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 1000);
+    camera.position.set(0, 0, 18);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(devicePixelRatio);
+    wrap.appendChild(renderer.domElement);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+    const dir = new THREE.DirectionalLight(0xffffff, 0.8);
+    dir.position.set(5, 10, 7);
+    scene.add(dir);
+
+    let nodeMeshes = [];
+    let nodeData = [];
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+
+    function clearGraph() {
+      nodeMeshes.forEach(m => scene.remove(m));
+      nodeMeshes = [];
+      nodeData = [];
+      scene.children.filter(c => c.userData?.isEdge).forEach(c => scene.remove(c));
+    }
+
+    function renderGraph(data) {
+      clearGraph();
+      const map = new Map();
+      data.nodes.forEach((n, i) => {
+        const geo = new THREE.SphereGeometry(n.label === 'Class' ? 0.18 : 0.12, 16, 16);
+        const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(n.color) });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(n.x, n.y, n.z);
+        mesh.userData = n;
+        scene.add(mesh);
+        nodeMeshes.push(mesh);
+        nodeData.push(n);
+        map.set(n.id, mesh.position.clone());
+      });
+
+      data.edges.forEach(e => {
+        if (!enabledEdges.has(e.edge_type)) return;
+        const a = map.get(e.source), b = map.get(e.target);
+        if (!a || !b) return;
+        const points = [a, b];
+        const geo = new THREE.BufferGeometry().setFromPoints(points);
+        const color = edgeColor(e);
+        const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.55 });
+        const line = new THREE.Line(geo, mat);
+        line.userData = { isEdge: true };
+        scene.add(line);
+      });
+
+      statsEl.innerHTML = `Symbols: <b>${data.symbol_count}</b><br>Edges: <b>${data.edge_count}</b>`;
+      loadStats();
+      if (data.nodes.length) {
+        const box = new THREE.Box3();
+        nodeMeshes.forEach(m => box.expandByObject(m));
+        const center = box.getCenter(new THREE.Vector3());
+        controls.target.copy(center);
+      }
+    }
+
+    async function loadProjects() {
+      const res = await fetch('/api/projects');
+      const data = await res.json();
+      projectSelect.innerHTML = '';
+      (data.projects || []).forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.name;
+        opt.textContent = p.name;
+        projectSelect.appendChild(opt);
+      });
+      if (projectSelect.options.length) await loadGraph();
+    }
+
+    async function loadGraph() {
+      const project = projectSelect.value;
+      if (!project) return;
+      const res = await fetch(`/api/graph?project=${encodeURIComponent(project)}&limit=400`);
+      const data = await res.json();
+      if (data.error) { statsEl.textContent = data.error; return; }
+      renderGraph(data);
+    }
+
+    async function loadStats() {
+      const project = projectSelect.value;
+      if (!project) return;
+      const res = await fetch(`/api/stats?project=${encodeURIComponent(project)}`);
+      const arch = await res.json();
+      if (arch.error) return;
+      const edges = (arch.edge_types || []).map(e => `${e.edge_type}:${e.count}`).join(', ');
+      const communities = arch.community_count ? `<br>Communities: <b>${arch.community_count}</b>` : '';
+      statsEl.innerHTML += `<br>Files: <b>${arch.file_count}</b>${communities}<br><small>${edges}</small>`;
+    }
+
+    async function runSearch() {
+      const project = projectSelect.value;
+      const q = searchInput.value.trim();
+      if (!project || !q) return;
+      const res = await fetch(`/api/search?project=${encodeURIComponent(project)}&q=${encodeURIComponent(q)}&limit=12`);
+      const data = await res.json();
+      searchResults.innerHTML = '';
+      (data.symbols || []).forEach(s => {
+        const row = document.createElement('div');
+        row.style.cursor = 'pointer';
+        row.style.padding = '2px 0';
+        row.textContent = `${s.name} (${s.label})`;
+        row.onclick = () => showNodeDetail(s.qualified_name);
+        searchResults.appendChild(row);
+      });
+    }
+
+    async function showNodeDetail(qn) {
+      const project = projectSelect.value;
+      const res = await fetch(`/api/node?project=${encodeURIComponent(project)}&qn=${encodeURIComponent(qn)}`);
+      const data = await res.json();
+      if (data.error) return;
+      nodeDetail.style.display = 'block';
+      nodeDetail.innerHTML = `<b>${data.symbol.name}</b><br>${data.symbol.qualified_name}<br>in: ${data.inbound.length} · out: ${data.outbound.length}`;
+    }
+
+    document.getElementById('reload-btn').onclick = loadGraph;
+    projectSelect.onchange = loadGraph;
+    searchInput.onkeydown = (e) => { if (e.key === 'Enter') runSearch(); };
+    addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+
+    renderer.domElement.addEventListener('click', (ev) => {
+      mouse.x = (ev.clientX / innerWidth) * 2 - 1;
+      mouse.y = -(ev.clientY / innerHeight) * 2 + 1;
+      raycaster.setFromCamera(mouse, camera);
+      const hits = raycaster.intersectObjects(nodeMeshes);
+      if (hits.length) showNodeDetail(hits[0].object.userData.id);
+    });
+
+    renderer.domElement.addEventListener('mousemove', (ev) => {
+      mouse.x = (ev.clientX / innerWidth) * 2 - 1;
+      mouse.y = -(ev.clientY / innerHeight) * 2 + 1;
+      raycaster.setFromCamera(mouse, camera);
+      const hits = raycaster.intersectObjects(nodeMeshes);
+      if (hits.length) {
+        const n = hits[0].object.userData;
+        tooltip.style.display = 'block';
+        tooltip.style.left = (ev.clientX + 12) + 'px';
+        tooltip.style.top = (ev.clientY + 12) + 'px';
+        tooltip.innerHTML = `<b>${n.name}</b><br>${n.label}<br><small>${n.file_path}</small>`;
+      } else tooltip.style.display = 'none';
+    });
+
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+    loadProjects();
+  </script>
+</body>
+</html>

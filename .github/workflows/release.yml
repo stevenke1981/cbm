@@ -1,0 +1,158 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v0.1.0) — used for draft naming only when not pushing a tag"
+        required: false
+        default: "manual"
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .
+      - run: cargo test --all-targets
+
+  build:
+    name: Build (${{ matrix.artifact }})
+    needs: test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact: cbrlm-linux-x64
+            archive: tar.gz
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            artifact: cbrlm-linux-arm64
+            archive: tar.gz
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: cbrlm-windows-x64
+            archive: zip
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact: cbrlm-macos-arm64
+            archive: tar.gz
+          - os: macos-13
+            target: x86_64-apple-darwin
+            artifact: cbrlm-macos-x64
+            archive: tar.gz
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .
+
+      - name: cargo build --release
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Package archive (Unix)
+        if: matrix.archive == 'tar.gz'
+        shell: bash
+        run: |
+          chmod +x scripts/package-artifact.sh
+          BIN="target/${{ matrix.target }}/release/cbrlm"
+          ./scripts/package-artifact.sh "${{ matrix.artifact }}" "$BIN"
+
+      - name: Package archive (Windows)
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: |
+          $bin = "target/${{ matrix.target }}/release/cbrlm.exe"
+          ./scripts/package-artifact.ps1 "${{ matrix.artifact }}" $bin
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            dist/${{ matrix.artifact }}.${{ matrix.archive }}
+            dist/${{ matrix.artifact }}.sha256
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Resolve version tag
+        id: version
+        shell: bash
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build SHA256SUMS.txt
+        shell: bash
+        run: |
+          mkdir -p release-assets
+          shopt -s nullglob
+          for archive in dist/*.tar.gz dist/*.zip; do
+            cp "$archive" release-assets/
+          done
+          {
+            echo "# CBRLM ${{ steps.version.outputs.tag }} checksums"
+            echo "# Artifacts: windows-x64, linux-x64, linux-arm64, macos-x64, macos-arm64"
+            for checksum in dist/*.sha256; do
+              cat "$checksum"
+            done
+          } > release-assets/SHA256SUMS.txt
+          cp packaging/releases.manifest.json release-assets/releases.manifest.json
+          ls -la release-assets/
+
+      - name: Create GitHub Release
+        if: github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && inputs.tag != 'manual')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
+          name: CBRLM ${{ steps.version.outputs.tag }}
+          draft: ${{ github.event_name == 'workflow_dispatch' }}
+          prerelease: ${{ contains(steps.version.outputs.tag, '-') }}
+          generate_release_notes: true
+          files: release-assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Artifacts only (no release tag)
+        if: github.event_name == 'workflow_dispatch' && inputs.tag == 'manual'
+        run: |
+          echo "Build complete. Download artifacts from this workflow run."
+          ls -la release-assets/

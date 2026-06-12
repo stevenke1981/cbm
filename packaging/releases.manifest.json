@@ -1,0 +1,46 @@
+{
+  "version": "0.1.0",
+  "repository": "cbrlm/cbrlm",
+  "artifacts": [
+    {
+      "id": "cbrlm-windows-x64",
+      "os": "windows",
+      "arch": "x64",
+      "format": "zip",
+      "file": "cbrlm-windows-x64.zip",
+      "binary": "cbrlm.exe"
+    },
+    {
+      "id": "cbrlm-linux-x64",
+      "os": "linux",
+      "arch": "x64",
+      "format": "tar.gz",
+      "file": "cbrlm-linux-x64.tar.gz",
+      "binary": "cbrlm"
+    },
+    {
+      "id": "cbrlm-linux-arm64",
+      "os": "linux",
+      "arch": "arm64",
+      "format": "tar.gz",
+      "file": "cbrlm-linux-arm64.tar.gz",
+      "binary": "cbrlm"
+    },
+    {
+      "id": "cbrlm-macos-x64",
+      "os": "macos",
+      "arch": "x64",
+      "format": "tar.gz",
+      "file": "cbrlm-macos-x64.tar.gz",
+      "binary": "cbrlm"
+    },
+    {
+      "id": "cbrlm-macos-arm64",
+      "os": "macos",
+      "arch": "arm64",
+      "format": "tar.gz",
+      "file": "cbrlm-macos-arm64.tar.gz",
+      "binary": "cbrlm"
+    }
+  ]
+}

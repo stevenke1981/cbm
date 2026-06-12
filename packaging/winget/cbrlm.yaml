@@ -1,0 +1,25 @@
+# winget manifest template — update PackageIdentifier and InstallerSha256 on release
+PackageIdentifier: CBRLM.CBRLM
+PackageVersion: 0.1.0
+PackageLocale: en-US
+Publisher: CBRLM Contributors
+PackageName: CBRLM
+PackageUrl: https://github.com/cbrlm/cbrlm
+License: MIT
+ShortDescription: Codebase RLM Memory MCP server for AI coding agents
+Moniker: cbrlm
+Tags:
+  - mcp
+  - codebase
+  - knowledge-graph
+Installers:
+  - Architecture: x64
+    InstallerType: zip
+    InstallerUrl: https://github.com/cbrlm/cbrlm/releases/download/v0.1.0/cbrlm-windows-x64.zip
+    InstallerSha256: PLACEHOLDER
+    NestedInstallerType: portable
+    NestedInstallerFiles:
+      - RelativeFilePath: cbrlm.exe
+        PortableCommandAlias: cbrlm
+ManifestType: singleton
+ManifestVersion: 1.6.0

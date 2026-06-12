@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .
+
+      - name: cargo test
+        run: cargo test --all-targets
+
+      - name: cargo clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: cargo build release
+        run: cargo build --release
+
+      - name: smoke test binary
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            BIN=./target/release/cbrlm.exe
+          else
+            BIN=./target/release/cbrlm
+          fi
+          "$BIN" --version
+          "$BIN" install --dry-run --all
+          "$BIN" hook-session-start >/dev/null
+
+      - name: smoke graph CLI (Section 4)
+        shell: bash
+        run: ./scripts/smoke-quality-gates.sh --skip-build
