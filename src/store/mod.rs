@@ -346,19 +346,93 @@ impl Store {
             .map_err(Into::into)
     }
 
-    pub fn search(&self, filter: &SearchFilter) -> Result<SearchResult> {
-        let mut stmt = self.conn.prepare(
+    /// Batch-resolve multiple symbols in a single SQL query.
+    /// Returns a map from qualified_name to Symbol for all found symbols.
+    /// Unknown QNs are simply absent from the map.
+    pub fn find_symbols_batch(&self, qns: &[&str]) -> Result<HashMap<String, Symbol>> {
+        if qns.is_empty() {
+            return Ok(HashMap::new());
+        }
+        // Build placeholders: (?1, project=const) → we need one ? per QN
+        // Use dynamic SQL: SELECT ... WHERE qualified_name IN (?, ?, ...) AND project = ?
+        let placeholders: Vec<String> = qns.iter().enumerate()
+            .map(|(i, _)| format!("?{}", i + 1))
+            .collect();
+        let sql = format!(
             "SELECT qualified_name, name, label, file_path, line_start, line_end, signature, properties_json
-             FROM symbols WHERE project = ?1 ORDER BY qualified_name",
-        )?;
-        let all: Vec<Symbol> = stmt
-            .query_map(params![self.project], symbol_from_row)?
+             FROM symbols WHERE project = ?{project_idx} AND qualified_name IN ({})",
+            placeholders.join(", "),
+            project_idx = qns.len() + 1,
+        );
+
+        let mut stmt = self.conn.prepare(&sql)?;
+        let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+        for qn in qns {
+            param_values.push(Box::new(qn.to_string()));
+        }
+        param_values.push(Box::new(self.project.clone()));
+
+        let params_ref: Vec<&dyn rusqlite::types::ToSql> = param_values.iter().map(|p| p.as_ref()).collect();
+        let rows = stmt
+            .query_map(params_ref.as_slice(), symbol_from_row)?
+            .collect::<std::result::Result<Vec<Symbol>, _>>()?;
+
+        Ok(rows.into_iter().map(|s| (s.qualified_name.clone(), s)).collect())
+    }
+
+    pub fn search(&self, filter: &SearchFilter) -> Result<SearchResult> {
+        // Build a dynamic SQL WHERE clause for fields that SQLite can handle,
+        // so we don't load every symbol into memory just to filter a few rows.
+        // Regex patterns (name_pattern, qn_pattern) and `query` (which searches
+        // across multiple fields) are still applied as a Rust post-filter.
+        let mut conditions: Vec<String> = vec!["project = ?1".into()];
+        let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+        let mut param_idx = 2usize;
+
+        // Label: direct equality in SQL.
+        if let Some(label) = &filter.label {
+            conditions.push(format!("label = ?{param_idx}"));
+            param_values.push(Box::new(label.clone()));
+            param_idx += 1;
+        }
+
+        // file_pattern: use SQLite GLOB (syntax compatible with glob::Pattern).
+        if let Some(fp) = &filter.file_pattern {
+            conditions.push(format!("file_path GLOB ?{param_idx}"));
+            param_values.push(Box::new(fp.clone()));
+            param_idx += 1;
+        }
+
+        // query: push down a LIKE filter on name + qualified_name to cut down rows.
+        // The full Rust filter (which also checks signature) still runs afterward.
+        if let Some(q) = &filter.query {
+            let like_q = format!("%{}%", q.replace('%', "\\%").replace('_', "\\_"));
+            conditions.push(format!(
+                "(name LIKE ?{param_idx} ESCAPE '\\' OR qualified_name LIKE ?{param_idx} ESCAPE '\\')"
+            ));
+            param_values.push(Box::new(like_q));
+        }
+
+        let where_clause = conditions.join(" AND ");
+        let sql = format!(
+            "SELECT qualified_name, name, label, file_path, line_start, line_end, signature, properties_json
+             FROM symbols WHERE {where_clause} ORDER BY qualified_name"
+        );
+
+        // Prepend the project parameter (always at ?1)
+        let mut all_params: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(self.project.clone())];
+        all_params.extend(param_values);
+        let params_ref: Vec<&dyn rusqlite::types::ToSql> = all_params.iter().map(|p| p.as_ref()).collect();
+
+        let mut stmt = self.conn.prepare(&sql)?;
+        let pre_filtered: Vec<Symbol> = stmt
+            .query_map(params_ref.as_slice(), symbol_from_row)?
             .collect::<std::result::Result<Vec<_>, _>>()?;
 
-        let mut filtered: Vec<Symbol> = all
-            .iter()
-            .filter(|sym| matches_filter(sym, filter))
-            .cloned()
+        // Apply remaining Rust-side filters (regex patterns, full query match).
+        let mut filtered: Vec<Symbol> = pre_filtered
+            .into_iter()
+            .filter(|sym| matches_filter_remaining(sym, filter))
             .collect();
 
         if needs_graph_filter(filter) {
@@ -385,10 +459,20 @@ impl Store {
 
             if filter.include_connected {
                 let rel = relationship.unwrap_or("CALLS");
-                let by_qn: HashMap<String, Symbol> = all
-                    .iter()
-                    .map(|s| (s.qualified_name.clone(), s.clone()))
+                // include_connected needs the full symbol map to look up
+                // neighbors that didn't match the original filter.
+                let by_qn: HashMap<String, Symbol> = self
+                    .conn
+                    .prepare(
+                        "SELECT qualified_name, name, label, file_path, line_start, line_end, signature, properties_json
+                         FROM symbols WHERE project = ?1",
+                    )?
+                    .query_map(params![self.project], symbol_from_row)?
+                    .collect::<std::result::Result<Vec<Symbol>, _>>()?
+                    .into_iter()
+                    .map(|s| (s.qualified_name.clone(), s))
                     .collect();
+
                 let mut expanded: HashSet<String> =
                     filtered.iter().map(|s| s.qualified_name.clone()).collect();
                 let mut connected = filtered.clone();
@@ -429,12 +513,14 @@ impl Store {
             .ok_or_else(|| Error::SymbolNotFound(start_qn.to_string()))?;
 
         let mut visited = HashSet::new();
-        let mut nodes = vec![start.clone()];
-        let mut edges = Vec::new();
-        let mut queue = VecDeque::new();
+        let mut nodes: Vec<Symbol> = vec![start.clone()];
+        let mut edges: Vec<Edge> = Vec::new();
+        // Queue of (qualified_name, depth)
+        let mut queue: VecDeque<(String, usize)> = VecDeque::new();
         queue.push_back((start_qn.to_string(), 0));
         visited.insert(start_qn.to_string());
 
+        // Process one BFS level at a time so we can batch-resolve symbols.
         while let Some((qn, d)) = queue.pop_front() {
             if d >= depth {
                 continue;
@@ -448,7 +534,10 @@ impl Store {
                     all
                 }
             };
-            for edge in edge_rows {
+
+            // Collect newly discovered neighbors at this level
+            let mut discovered: Vec<String> = Vec::new();
+            for edge in &edge_rows {
                 edges.push(edge.clone());
                 let neighbor = if edge.src_qn == qn {
                     &edge.dst_qn
@@ -456,9 +545,18 @@ impl Store {
                     &edge.src_qn
                 };
                 if visited.insert(neighbor.clone()) {
-                    if let Some(sym) = self.find_symbol(neighbor)? {
-                        nodes.push(sym);
-                        queue.push_back((neighbor.clone(), d + 1));
+                    discovered.push(neighbor.clone());
+                }
+            }
+
+            // Batch-resolve all discovered symbols (one SQL query instead of N)
+            if !discovered.is_empty() {
+                let qn_refs: Vec<&str> = discovered.iter().map(|s| s.as_str()).collect();
+                let batch = self.find_symbols_batch(&qn_refs)?;
+                for dqn in discovered {
+                    if let Some(sym) = batch.get(&dqn) {
+                        nodes.push(sym.clone());
+                        queue.push_back((dqn, d + 1));
                     }
                 }
             }
@@ -898,15 +996,27 @@ impl Store {
 }
 
 fn apply_sqlite_pragmas(conn: &Connection) -> Result<()> {
-    conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")?;
-    if let Some(size) = sqlite_mmap_size() {
-        conn.execute(&format!("PRAGMA mmap_size = {size}"), [])?;
+    // Use execute_batch because some PRAGMAs (e.g. journal_mode) return a
+    // result row — execute_batch wraps sqlite3_exec which ignores them.
+    conn.execute_batch(
+        "PRAGMA journal_mode=WAL;
+         PRAGMA synchronous=NORMAL;",
+    )?;
+    // cache_size and temp_store: use rusqlite pragma_update (which correctly
+    // handles result rows) instead of execute_batch / execute.
+    conn.pragma_update(None, "cache_size", -64_000)?;  // 64 MB page cache
+    conn.pragma_update(None, "temp_store", "MEMORY")?;  // temp tables in memory
+    // mmap_size: respect env var override, else use a sensible default (256 MB)
+    let mmap = sqlite_mmap_size()
+        .or_else(default_mmap_size);
+    if let Some(size) = mmap {
+        conn.execute_batch(&format!("PRAGMA mmap_size = {size}"))?;
     }
     Ok(())
 }
 
 fn sqlite_mmap_size() -> Option<i64> {
-    for key in ["CBRLM_SQLITE_MMAP_SIZE", "CBM_SQLITE_MMAP_SIZE"] {
+    for key in ["CBM_SQLITE_MMAP_SIZE"] {
         if let Ok(v) = std::env::var(key) {
             if let Ok(n) = v.parse::<i64>() {
                 return Some(n);
@@ -914,6 +1024,20 @@ fn sqlite_mmap_size() -> Option<i64> {
         }
     }
     None
+}
+
+/// Return a platform-appropriate default mmap_size (256 MB), or None on platforms
+/// where mmap_size is known to cause issues (e.g. 32-bit, or certain network drives).
+fn default_mmap_size() -> Option<i64> {
+    // 256 MB default — safe for 64-bit systems; matches typical project DB sizes
+    #[cfg(target_pointer_width = "64")]
+    {
+        Some(256 * 1024 * 1024)
+    }
+    #[cfg(not(target_pointer_width = "64"))]
+    {
+        None
+    }
 }
 
 fn read_file_content(stored: &str) -> String {
@@ -1044,22 +1168,13 @@ fn normalize_direction(direction: Option<&str>) -> &str {
     }
 }
 
-fn matches_filter(sym: &Symbol, filter: &SearchFilter) -> bool {
-    if let Some(label) = &filter.label {
-        if &sym.label != label {
-            return false;
-        }
-    }
+/// Post-filter for fields that were NOT fully handled by the SQL WHERE clause.
+/// `label` and `file_pattern` are already in SQL; `query` only covered
+/// name/qualified_name in SQL (signature still needs Rust fallback);
+/// `name_pattern` / `qn_pattern` are regex so they remain in Rust.
+fn matches_filter_remaining(sym: &Symbol, filter: &SearchFilter) -> bool {
     if let Some(query) = &filter.query {
-        let q = query.to_lowercase();
-        let hay = format!(
-            "{} {} {}",
-            sym.name,
-            sym.qualified_name,
-            sym.signature.as_deref().unwrap_or("")
-        )
-        .to_lowercase();
-        if !hay.contains(&q) {
+        if !query_matches_symbol(query, sym) {
             return false;
         }
     }
@@ -1073,23 +1188,26 @@ fn matches_filter(sym: &Symbol, filter: &SearchFilter) -> bool {
             return false;
         }
     }
-    if let Some(pattern) = &filter.file_pattern {
-        if !glob_match(pattern, &sym.file_path) {
-            return false;
-        }
-    }
     true
+}
+
+/// Check whether `query` (case-insensitive) appears in name, qualified_name,
+/// or signature.  Extracted helper shared by both filter functions.
+fn query_matches_symbol(query: &str, sym: &Symbol) -> bool {
+    let q = query.to_lowercase();
+    let hay = format!(
+        "{} {} {}",
+        sym.name,
+        sym.qualified_name,
+        sym.signature.as_deref().unwrap_or("")
+    )
+    .to_lowercase();
+    hay.contains(&q)
 }
 
 fn regex_match(pattern: &str, value: &str) -> bool {
     regex::Regex::new(pattern)
         .map(|re| re.is_match(value))
-        .unwrap_or(false)
-}
-
-fn glob_match(pattern: &str, value: &str) -> bool {
-    glob::Pattern::new(pattern)
-        .map(|p| p.matches(value))
         .unwrap_or(false)
 }
 

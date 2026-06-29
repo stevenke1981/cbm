@@ -41,23 +41,23 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            artifact: cbrlm-linux-x64
+            artifact: cbm-linux-x64
             archive: tar.gz
           - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
-            artifact: cbrlm-linux-arm64
+            artifact: cbm-linux-arm64
             archive: tar.gz
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            artifact: cbrlm-windows-x64
+            artifact: cbm-windows-x64
             archive: zip
           - os: macos-latest
             target: aarch64-apple-darwin
-            artifact: cbrlm-macos-arm64
+            artifact: cbm-macos-arm64
             archive: tar.gz
           - os: macos-13
             target: x86_64-apple-darwin
-            artifact: cbrlm-macos-x64
+            artifact: cbm-macos-x64
             archive: tar.gz
 
     steps:
@@ -79,14 +79,14 @@ jobs:
         shell: bash
         run: |
           chmod +x scripts/package-artifact.sh
-          BIN="target/${{ matrix.target }}/release/cbrlm"
+          BIN="target/${{ matrix.target }}/release/cbm"
           ./scripts/package-artifact.sh "${{ matrix.artifact }}" "$BIN"
 
       - name: Package archive (Windows)
         if: matrix.archive == 'zip'
         shell: pwsh
         run: |
-          $bin = "target/${{ matrix.target }}/release/cbrlm.exe"
+          $bin = "target/${{ matrix.target }}/release/cbm.exe"
           ./scripts/package-artifact.ps1 "${{ matrix.artifact }}" $bin
 
       - name: Smoke release artifact (Windows)
@@ -138,7 +138,7 @@ jobs:
             cp "$archive" release-assets/
           done
           {
-            echo "# CBRLM ${{ steps.version.outputs.tag }} checksums"
+            echo "# CBM ${{ steps.version.outputs.tag }} checksums"
             echo "# Artifacts: windows-x64, linux-x64, linux-arm64, macos-x64, macos-arm64"
             for checksum in dist/*.sha256; do
               cat "$checksum"
@@ -152,7 +152,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
-          name: CBRLM ${{ steps.version.outputs.tag }}
+          name: CBM ${{ steps.version.outputs.tag }}
           draft: ${{ github.event_name == 'workflow_dispatch' }}
           prerelease: ${{ contains(steps.version.outputs.tag, '-') }}
           generate_release_notes: true

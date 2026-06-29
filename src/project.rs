@@ -2,12 +2,12 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 
-/// Normalize project name; CBRLM indexes use `cbrlm+` prefix.
+/// Normalize project name; CBM indexes use `cbm+` prefix.
 pub fn normalize_project_name(name: &str) -> String {
-    if name.starts_with("cbrlm+") {
+    if name.starts_with("cbm+") {
         name.to_string()
     } else {
-        format!("cbrlm+{name}")
+        format!("cbm+{name}")
     }
 }
 
@@ -32,12 +32,12 @@ pub fn project_name_from_path(repo_path: &Path) -> String {
 }
 
 pub fn default_cache_dir() -> PathBuf {
-    if let Ok(dir) = std::env::var("CBRLM_CACHE_DIR") {
+    if let Ok(dir) = std::env::var("CBM_CACHE_DIR") {
         return PathBuf::from(dir);
     }
     dirs::cache_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join("cbrlm-mcp")
+        .join("cbm-mcp")
 }
 
 pub fn project_db_path(project: &str) -> PathBuf {
@@ -49,9 +49,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn adds_cbrlm_prefix() {
-        assert_eq!(normalize_project_name("my-app"), "cbrlm+my-app");
-        assert_eq!(normalize_project_name("cbrlm+my-app"), "cbrlm+my-app");
+    fn adds_cbm_prefix() {
+        assert_eq!(normalize_project_name("my-app"), "cbm+my-app");
+        assert_eq!(normalize_project_name("cbm+my-app"), "cbm+my-app");
     }
 
     #[test]
@@ -65,7 +65,7 @@ mod tests {
         let a = project_name_from_path(&foo);
         let b = project_name_from_path(&bar);
         assert_ne!(a, b);
-        assert!(a.starts_with("cbrlm+app-"));
-        assert!(b.starts_with("cbrlm+app-"));
+        assert!(a.starts_with("cbm+app-"));
+        assert!(b.starts_with("cbm+app-"));
     }
 }

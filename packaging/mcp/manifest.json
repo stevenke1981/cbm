@@ -1,14 +1,14 @@
 {
   "schema_version": "0.1",
-  "name": "cbrlm-mcp",
-  "display_name": "CBRLM MCP",
+  "name": "cbm-mcp",
+  "display_name": "CBM MCP",
   "version": "0.1.0",
   "transport": "stdio",
-  "command": "cbrlm",
+  "command": "cbm",
   "args": [],
   "env": {
-    "CBRLM_PROJECT_PREFIX": "cbrlm+",
-    "CBRLM_AGENT": "generic"
+    "CBM_PROJECT_PREFIX": "cbm+",
+    "CBM_AGENT": "generic"
   },
   "capabilities": {
     "tools": true,
@@ -36,9 +36,9 @@
     "rlm_workflow"
   ],
   "install": {
-    "windows_binary": "target/release/cbrlm.exe",
-    "unix_binary": "target/release/cbrlm",
-    "recommended_command": "cbrlm install --yes --all",
+    "windows_binary": "target/release/cbm.exe",
+    "unix_binary": "target/release/cbm",
+    "recommended_command": "cbm install --yes --all",
     "manual_templates": [
       "packaging/mcp/generic-mcp.json",
       "packaging/mcp/codex-config.toml",

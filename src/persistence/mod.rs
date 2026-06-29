@@ -16,9 +16,7 @@ const ZSTD_LEVEL: i32 = 3;
 
 pub fn env_enabled() -> bool {
     matches!(
-        std::env::var("CBRLM_PERSISTENCE")
-            .or_else(|_| std::env::var("CBM_PERSISTENCE"))
-            .as_deref(),
+        std::env::var("CBM_PERSISTENCE").as_deref(),
         Ok("1") | Ok("true") | Ok("yes") | Ok("on")
     )
 }
@@ -132,10 +130,10 @@ mod tests {
     fn roundtrip_artifact() {
         let _guard = test_lock::acquire();
         let cache = TempDir::new().unwrap();
-        std::env::set_var("CBRLM_CACHE_DIR", cache.path());
+        std::env::set_var("CBM_CACHE_DIR", cache.path());
 
         let dir = fixture_repo();
-        let project = "cbrlm+artifact-roundtrip";
+        let project = "cbm+artifact-roundtrip";
         let result = Pipeline::new(IndexMode::Full)
             .set_export_artifact(true)
             .run(dir.path(), Some("artifact-roundtrip"))
@@ -172,9 +170,9 @@ mod tests {
     fn try_restore_skips_when_cache_exists() {
         let _guard = test_lock::acquire();
         let cache = TempDir::new().unwrap();
-        std::env::set_var("CBRLM_CACHE_DIR", cache.path());
+        std::env::set_var("CBM_CACHE_DIR", cache.path());
         let dir = fixture_repo();
-        let project = "cbrlm+restore-skip";
+        let project = "cbm+restore-skip";
         Pipeline::new(IndexMode::Full)
             .set_export_artifact(true)
             .run(dir.path(), Some("restore-skip"))

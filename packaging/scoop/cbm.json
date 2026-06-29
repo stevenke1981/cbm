@@ -1,0 +1,24 @@
+{
+    "version": "0.1.0",
+    "description": "Codebase Memory MCP — Rust knowledge graph server for AI coding agents",
+    "homepage": "https://github.com/cbm/cbm",
+    "license": "MIT",
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/cbm/cbm/releases/download/v0.1.0/cbm-windows-x64.zip",
+            "hash": "sha256:UPDATE_FROM_RELEASE_SHA256SUMS"
+        }
+    },
+    "bin": "cbm.exe",
+    "checkver": {
+        "github": "https://github.com/cbm/cbm"
+    },
+    "autoupdate": {
+        "architecture": {
+            "64bit": {
+                "url": "https://github.com/cbm/cbm/releases/download/v$version/cbm-windows-x64.zip"
+            }
+        }
+    },
+    "notes": "Run 'cbm install --yes --all' after install to configure MCP agents. Linux/macOS: see packaging/linux/install.sh and packaging/macos/install.sh"
+}

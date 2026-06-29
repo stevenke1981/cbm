@@ -1,0 +1,25 @@
+# winget manifest template — update PackageIdentifier and InstallerSha256 on release
+PackageIdentifier: CBM.CBM
+PackageVersion: 0.1.0
+PackageLocale: en-US
+Publisher: CBM Contributors
+PackageName: CBM
+PackageUrl: https://github.com/cbm/cbm
+License: MIT
+ShortDescription: Codebase Memory MCP server for AI coding agents
+Moniker: cbm
+Tags:
+  - mcp
+  - codebase
+  - knowledge-graph
+Installers:
+  - Architecture: x64
+    InstallerType: zip
+    InstallerUrl: https://github.com/cbm/cbm/releases/download/v0.1.0/cbm-windows-x64.zip
+    InstallerSha256: PLACEHOLDER
+    NestedInstallerType: portable
+    NestedInstallerFiles:
+      - RelativeFilePath: cbm.exe
+        PortableCommandAlias: cbm
+ManifestType: singleton
+ManifestVersion: 1.6.0

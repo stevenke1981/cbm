@@ -10,28 +10,28 @@ use std::sync::Arc;
 
 pub fn print_help() {
     eprintln!(
-        r#"{SERVER_NAME} v{SERVER_VERSION} — Codebase RLM Memory MCP (Rust)
+        r#"{SERVER_NAME} v{SERVER_VERSION} — Codebase Memory MCP (Rust)
 
 USAGE:
-    cbrlm                          Run MCP server (stdio JSON-RPC)
-    cbrlm [--ui] [--port=9749]         MCP server + optional graph UI
-    cbrlm ui [--port=9749]             Graph UI only
-    cbrlm cli [--json] [--quiet] <tool> [args_json]
+    cbm                          Run MCP server (stdio JSON-RPC)
+    cbm [--ui] [--port=9749]         MCP server + optional graph UI
+    cbm ui [--port=9749]             Graph UI only
+    cbm cli [--json] [--quiet] <tool> [args_json]
 
 CLI OUTPUT:
     --json     Machine-readable JSON on stdout; diagnostics on stderr
     --quiet    Suppress tracing logs (recommended for scripts piping stdout)
-    cbrlm install [--dry-run] [--force] [--yes] [--all]
-    cbrlm uninstall [--dry-run] [--yes] [--all] [--keep-binary]
-    cbrlm hook-augment
-    cbrlm hook-session-start
-    cbrlm config <list|get|snippet>
-    cbrlm --version
-    cbrlm --help
+    cbm install [--dry-run] [--force] [--yes] [--all]
+    cbm uninstall [--dry-run] [--yes] [--all] [--keep-binary]
+    cbm hook-augment
+    cbm hook-session-start
+    cbm config <list|get|snippet>
+    cbm --version
+    cbm --help
 
 HTTP UI:
-    cbrlm --ui --port 9749             3D knowledge graph at http://127.0.0.1:9749
-    CBRLM_UI=1 CBRLM_PORT=9749 cbrlm
+    cbm --ui --port 9749             3D knowledge graph at http://127.0.0.1:9749
+    CBM_UI=1 CBM_PORT=9749 cbm
 
 RLM WORKFLOW:
     Phase 0: index_repository
@@ -197,7 +197,7 @@ pub fn run_config(action: &str) -> Result<()> {
             );
         }
         _ => {
-            eprintln!("Usage: cbrlm config <list|snippet>");
+            eprintln!("Usage: cbm config <list|snippet>");
         }
     }
     Ok(())
@@ -238,7 +238,7 @@ pub fn run_mcp_server(ui_config: UiConfig) -> Result<()> {
         server.stop();
     }
     if shutdown.is_triggered() {
-        eprintln!("cbrlm shutdown complete");
+        eprintln!("cbm shutdown complete");
     } else if ui_config.enabled {
         if let Some(ref mut server) = http {
             eprintln!("MCP stdin closed; graph UI still running (Ctrl+C to exit)");
@@ -261,9 +261,9 @@ mod tests {
     fn human_index_summary() {
         let out = format_cli_human(
             "index_repository",
-            &json!({"success": true, "project": "cbrlm+x", "files_indexed": 3, "symbols_extracted": 10, "edges_extracted": 5, "duration_ms": 120}),
+            &json!({"success": true, "project": "cbm+x", "files_indexed": 3, "symbols_extracted": 10, "edges_extracted": 5, "duration_ms": 120}),
         );
-        assert!(out.contains("cbrlm+x"));
+        assert!(out.contains("cbm+x"));
         assert!(out.contains("symbols=10"));
     }
 

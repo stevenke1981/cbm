@@ -1,15 +1,15 @@
 {
   "mcp": {
-    "cbrlm-mcp": {
+    "cbm-mcp": {
       "type": "local",
       "command": [
-        "{{CBRLM_BINARY}}"
+        "{{CBM_BINARY}}"
       ],
       "enabled": true,
       "timeout": 120000,
       "environment": {
-        "CBRLM_PROJECT_PREFIX": "cbrlm+",
-        "CBRLM_AGENT": "opencode"
+        "CBM_PROJECT_PREFIX": "cbm+",
+        "CBM_AGENT": "opencode"
       }
     }
   }

@@ -46,7 +46,7 @@ pub fn workflow_guidance(phase: &str) -> Value {
             "paper": "https://arxiv.org/pdf/2512.24601",
             "phases": ["filter", "map", "reduce"],
             "prerequisite": "index_repository(repo_path='.')",
-            "project_naming": "CBRLM indexes use cbrlm+ prefix",
+            "project_naming": "CBM indexes use cbm+ prefix",
             "agents": ["opencode", "codex", "claude-code", "gemini-cli", "zed", "aider"],
             "loop": "filter → map (parallel) → reduce"
         }),

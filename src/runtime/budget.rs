@@ -9,7 +9,7 @@ pub struct MemoryBudget {
 
 impl MemoryBudget {
     pub fn from_env() -> Self {
-        let mb: usize = std::env::var("CBRLM_MEMORY_BUDGET_MB")
+        let mb: usize = std::env::var("CBM_MEMORY_BUDGET_MB")
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(512);

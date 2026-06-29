@@ -1,11 +1,11 @@
-//! Optional phase timing when `CBRLM_PROFILE=1`.
+//! Optional phase timing when `CBM_PROFILE=1`.
 
 use std::time::Instant;
 use tracing::info;
 
 pub fn profiling_enabled() -> bool {
     matches!(
-        std::env::var("CBRLM_PROFILE")
+        std::env::var("CBM_PROFILE")
             .or_else(|_| std::env::var("CBM_PROFILE"))
             .as_deref(),
         Ok("1") | Ok("true") | Ok("yes") | Ok("on")

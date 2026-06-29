@@ -625,7 +625,7 @@ fn search_schema() -> Value {
         "properties": {
             "project": { "type": "string" },
             "query": { "type": ["string", "null"] },
-            "vector_query": { "type": ["string", "null"], "description": "Semantic vector search (requires CBRLM_SEMANTIC_ENABLED=1)" },
+            "vector_query": { "type": ["string", "null"], "description": "Semantic vector search (requires CBM_SEMANTIC_ENABLED=1)" },
             "semantic_query": { "type": ["string", "null"] },
             "label": { "type": ["string", "null"] },
             "name_pattern": { "type": ["string", "null"], "description": "Regex pattern matched against symbol name" },

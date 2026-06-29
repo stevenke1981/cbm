@@ -1,46 +1,46 @@
 {
   "version": "0.1.0",
-  "repository": "cbrlm/cbrlm",
+  "repository": "cbm/cbm",
   "artifacts": [
     {
-      "id": "cbrlm-windows-x64",
+      "id": "cbm-windows-x64",
       "os": "windows",
       "arch": "x64",
       "format": "zip",
-      "file": "cbrlm-windows-x64.zip",
-      "binary": "cbrlm.exe"
+      "file": "cbm-windows-x64.zip",
+      "binary": "cbm.exe"
     },
     {
-      "id": "cbrlm-linux-x64",
+      "id": "cbm-linux-x64",
       "os": "linux",
       "arch": "x64",
       "format": "tar.gz",
-      "file": "cbrlm-linux-x64.tar.gz",
-      "binary": "cbrlm"
+      "file": "cbm-linux-x64.tar.gz",
+      "binary": "cbm"
     },
     {
-      "id": "cbrlm-linux-arm64",
+      "id": "cbm-linux-arm64",
       "os": "linux",
       "arch": "arm64",
       "format": "tar.gz",
-      "file": "cbrlm-linux-arm64.tar.gz",
-      "binary": "cbrlm"
+      "file": "cbm-linux-arm64.tar.gz",
+      "binary": "cbm"
     },
     {
-      "id": "cbrlm-macos-x64",
+      "id": "cbm-macos-x64",
       "os": "macos",
       "arch": "x64",
       "format": "tar.gz",
-      "file": "cbrlm-macos-x64.tar.gz",
-      "binary": "cbrlm"
+      "file": "cbm-macos-x64.tar.gz",
+      "binary": "cbm"
     },
     {
-      "id": "cbrlm-macos-arm64",
+      "id": "cbm-macos-arm64",
       "os": "macos",
       "arch": "arm64",
       "format": "tar.gz",
-      "file": "cbrlm-macos-arm64.tar.gz",
-      "binary": "cbrlm"
+      "file": "cbm-macos-arm64.tar.gz",
+      "binary": "cbm"
     }
   ]
 }

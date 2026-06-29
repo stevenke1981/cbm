@@ -1,15 +1,15 @@
 [package]
-name = "cbrlm"
+name = "cbm"
 version = "0.1.0"
 edition = "2021"
-description = "Codebase RLM Memory MCP — Rust knowledge graph server for AI coding agents"
+description = "Codebase Memory MCP — Rust knowledge graph server for AI coding agents"
 license = "MIT"
-authors = ["CBRLM Contributors"]
-keywords = ["mcp", "codebase", "rlm", "knowledge-graph"]
+authors = ["CBM Contributors"]
+keywords = ["mcp", "codebase", "memory", "knowledge-graph"]
 categories = ["development-tools", "command-line-utilities"]
 
 [[bin]]
-name = "cbrlm"
+name = "cbm"
 path = "src/main.rs"
 
 [dependencies]

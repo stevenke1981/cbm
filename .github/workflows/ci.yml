@@ -42,9 +42,9 @@ jobs:
         shell: bash
         run: |
           if [ "${{ runner.os }}" = "Windows" ]; then
-            BIN=./target/release/cbrlm.exe
+            BIN=./target/release/cbm.exe
           else
-            BIN=./target/release/cbrlm
+            BIN=./target/release/cbm
           fi
           "$BIN" --version
           "$BIN" install --dry-run --all

@@ -319,7 +319,7 @@ mod tests {
 
     fn state_with(sig: Option<&str>, head: Option<&str>) -> WatchState {
         WatchState {
-            project: "cbrlm+test".into(),
+            project: "cbm+test".into(),
             repo_path: PathBuf::from("."),
             last_head: head.map(str::to_string),
             last_dirty_signature: sig.map(str::to_string),

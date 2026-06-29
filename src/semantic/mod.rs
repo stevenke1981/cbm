@@ -23,9 +23,9 @@ pub struct SemanticResult {
     pub semantically_related_edges: usize,
 }
 
-/// Check CBRLM_SEMANTIC_ENABLED or CBM_SEMANTIC_ENABLED (upstream compat).
-pub fn is_enabled() -> bool {
-    for key in ["CBRLM_SEMANTIC_ENABLED", "CBM_SEMANTIC_ENABLED"] {
+/// Check CBM_SEMANTIC_ENABLED.
+pub fn is_semantic_enabled() -> bool {
+    for key in ["CBM_SEMANTIC_ENABLED"] {
         if let Ok(v) = std::env::var(key) {
             return matches!(v.as_str(), "1" | "true" | "yes" | "on");
         }
@@ -34,7 +34,7 @@ pub fn is_enabled() -> bool {
 }
 
 pub fn should_run(mode: IndexMode) -> bool {
-    is_enabled() && mode != IndexMode::Fast
+    is_semantic_enabled() && mode != IndexMode::Fast
 }
 
 pub fn symbol_document(sym: &Symbol) -> String {
@@ -238,19 +238,23 @@ pub fn vector_search(
     let query_vec = Vector::from_tokens(&query_profile.tokens, &query_corpus, "query");
     let query_q = query_vec.quantized();
 
+    // Batch-resolve all vector entries' symbols in a single SQL query
+    let qns: Vec<&str> = entries.iter().map(|(qn, _, _, _, _)| qn.as_str()).collect();
+    let batch_map = store.find_symbols_batch(&qns)?;
+
     let mut scored: Vec<VectorMatch> = Vec::new();
     for (qn, stored, _name, _label, _file_path) in entries {
         let ri_prefilter = cosine_i8(&query_q, &stored);
         if ri_prefilter < 0.05 {
             continue;
         }
-        let Some(sym) = store.find_symbol(&qn)? else {
+        let Some(sym) = batch_map.get(&qn) else {
             continue;
         };
-        let target_tokens = tokenize(&symbol_document(&sym));
+        let target_tokens = tokenize(&symbol_document(sym));
         let pair_corpus = Corpus::from_documents(&[query_profile.tokens.clone(), target_tokens]);
-        let target_vec = Vector::from_tokens(&tokenize(&symbol_document(&sym)), &pair_corpus, &qn);
-        let target_profile = SymbolProfile::from_symbol(&sym);
+        let target_vec = Vector::from_tokens(&tokenize(&symbol_document(sym)), &pair_corpus, &qn);
+        let target_profile = SymbolProfile::from_symbol(sym);
         let breakdown = signals::score_pair(
             &query_profile,
             &target_profile,
@@ -263,9 +267,9 @@ pub fn vector_search(
         }
         scored.push(VectorMatch {
             qualified_name: qn,
-            name: sym.name,
-            label: sym.label,
-            file_path: sym.file_path,
+            name: sym.name.clone(),
+            label: sym.label.clone(),
+            file_path: sym.file_path.clone(),
             score: breakdown.combined,
             score_breakdown: Some(breakdown.to_json()),
         });

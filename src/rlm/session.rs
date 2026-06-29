@@ -227,7 +227,7 @@ mod tests {
     fn persisted_session_survives_store_reopen() {
         let _guard = test_lock::acquire();
         let cache = TempDir::new().unwrap();
-        std::env::set_var("CBRLM_CACHE_DIR", cache.path());
+        std::env::set_var("CBM_CACHE_DIR", cache.path());
 
         let dir = TempDir::new().unwrap();
         std::fs::write(dir.path().join("sample.txt"), "hello\nworld\n").unwrap();
@@ -245,6 +245,6 @@ mod tests {
             .expect("session should persist across CLI invocations");
         assert!(!loaded.chunks.is_empty());
 
-        std::env::remove_var("CBRLM_CACHE_DIR");
+        std::env::remove_var("CBM_CACHE_DIR");
     }
 }

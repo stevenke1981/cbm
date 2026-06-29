@@ -1,22 +1,22 @@
-use cbrlm::cli;
+use cbm::cli;
 use clap::{Parser, Subcommand};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Parser)]
 #[command(
-    name = "cbrlm",
+    name = "cbm",
     version,
-    about = "Codebase RLM Memory MCP — Rust knowledge graph server"
+    about = "Codebase Memory MCP — Rust knowledge graph server"
 )]
 struct Args {
     #[command(subcommand)]
     command: Option<Command>,
 
-    /// Enable HTTP graph UI (also CBRLM_UI=1)
+    /// Enable HTTP graph UI (also CBM_UI=1)
     #[arg(long, default_value_t = false)]
     ui: bool,
 
-    /// HTTP UI port (also CBRLM_PORT)
+    /// HTTP UI port (also CBM_PORT)
     #[arg(long, default_value_t = 9749)]
     port: u16,
 }
@@ -75,7 +75,7 @@ fn main() {
     if !cli_quiet {
         tracing_subscriber::fmt()
             .with_env_filter(
-                EnvFilter::from_default_env().add_directive("cbrlm=info".parse().unwrap()),
+                EnvFilter::from_default_env().add_directive("cbm=info".parse().unwrap()),
             )
             .with_writer(std::io::stderr)
             .init();
@@ -93,7 +93,7 @@ fn main() {
             force,
             yes,
             all,
-        }) => cli::run_install(cbrlm::install::InstallOptions {
+        }) => cli::run_install(cbm::install::InstallOptions {
             dry_run,
             force,
             yes,
@@ -105,7 +105,7 @@ fn main() {
             yes,
             all,
             keep_binary,
-        }) => cli::run_uninstall(cbrlm::install::UninstallOptions {
+        }) => cli::run_uninstall(cbm::install::UninstallOptions {
             dry_run,
             yes,
             all_agents: all,
@@ -121,7 +121,7 @@ fn main() {
         }
         Some(Command::Config { action }) => cli::run_config(&action),
         Some(Command::Ui { port }) => cli::run_ui_server(port),
-        None => cli::run_mcp_server(cbrlm::http::UiConfig::from_env_and_args(args.ui, args.port)),
+        None => cli::run_mcp_server(cbm::http::UiConfig::from_env_and_args(args.ui, args.port)),
     };
 
     if let Err(e) = result {

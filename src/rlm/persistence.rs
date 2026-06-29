@@ -134,7 +134,7 @@ mod tests {
     fn atomic_persist_survives_read() {
         let _guard = test_lock::acquire();
         let cache = TempDir::new().unwrap();
-        std::env::set_var("CBRLM_CACHE_DIR", cache.path());
+        std::env::set_var("CBM_CACHE_DIR", cache.path());
 
         let session = sample_session("atomic-test");
         persist_session(&session).unwrap();
@@ -142,14 +142,14 @@ mod tests {
         assert_eq!(loaded.len(), 1);
         assert_eq!(loaded[0].id, "atomic-test");
 
-        std::env::remove_var("CBRLM_CACHE_DIR");
+        std::env::remove_var("CBM_CACHE_DIR");
     }
 
     #[test]
     fn corrupt_session_file_is_removed_on_load() {
         let _guard = test_lock::acquire();
         let cache = TempDir::new().unwrap();
-        std::env::set_var("CBRLM_CACHE_DIR", cache.path());
+        std::env::set_var("CBM_CACHE_DIR", cache.path());
 
         let dir = sessions_dir();
         std::fs::create_dir_all(&dir).unwrap();
@@ -159,14 +159,14 @@ mod tests {
         assert!(loaded.is_empty());
         assert!(!dir.join("bad.json").exists());
 
-        std::env::remove_var("CBRLM_CACHE_DIR");
+        std::env::remove_var("CBM_CACHE_DIR");
     }
 
     #[test]
     fn overwrite_replaces_prior_session() {
         let _guard = test_lock::acquire();
         let cache = TempDir::new().unwrap();
-        std::env::set_var("CBRLM_CACHE_DIR", cache.path());
+        std::env::set_var("CBM_CACHE_DIR", cache.path());
 
         let mut session = sample_session("overwrite");
         persist_session(&session).unwrap();
@@ -177,6 +177,6 @@ mod tests {
         assert_eq!(loaded.len(), 1);
         assert_eq!(loaded[0].files_scanned, 99);
 
-        std::env::remove_var("CBRLM_CACHE_DIR");
+        std::env::remove_var("CBM_CACHE_DIR");
     }
 }

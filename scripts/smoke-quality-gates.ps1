@@ -31,32 +31,32 @@ if (-not $SkipBuild) {
     if ($LASTEXITCODE -ne 0) { throw "cargo build --release failed" }
 }
 
-$Bin = Join-Path $Root "target\release\cbrlm.exe"
+$Bin = Join-Path $Root "target\release\cbm.exe"
 if (-not (Test-Path $Bin)) {
-    $Bin = Join-Path $Root "target\release\cbrlm"
+    $Bin = Join-Path $Root "target\release\cbm"
 }
 if (-not (Test-Path $Bin)) {
     throw "release binary not found; run without -SkipBuild"
 }
 
-function Invoke-CbrlmCli([string[]]$CliArgs) {
+function Invoke-CbmCli([string[]]$CliArgs) {
     $out = & $Bin @CliArgs 2>&1 | Out-String
     if ($LASTEXITCODE -ne 0) {
-        throw "cbrlm cli failed: $($CliArgs -join ' ')`n$out"
+        throw "cbm cli failed: $($CliArgs -join ' ')`n$out"
     }
     return $out
 }
 
-function Invoke-CbrlmCliStdout([string[]]$CliArgs) {
+function Invoke-CbmCliStdout([string[]]$CliArgs) {
     $out = & $Bin @CliArgs 2>$null
     if ($LASTEXITCODE -ne 0) {
-        throw "cbrlm cli failed: $($CliArgs -join ' ')"
+        throw "cbm cli failed: $($CliArgs -join ' ')"
     }
     return ($out | Out-String).Trim()
 }
 
 Write-Host "==> smoke: index_repository" -ForegroundColor Cyan
-$indexOut = Invoke-CbrlmCli @(
+$indexOut = Invoke-CbmCli @(
     'cli', 'index_repository', '--json',
     '{"repo_path":".","project":"smoke-review","mode":"fast","persistence":false}'
 )
@@ -64,14 +64,14 @@ if ($indexOut -notmatch '"success":true') { throw "index_repository did not repo
 if ($indexOut -notmatch '"edges_extracted":[1-9]') { throw "index_repository emitted no edges" }
 
 Write-Host "==> smoke: search_graph" -ForegroundColor Cyan
-$searchOut = Invoke-CbrlmCli @(
+$searchOut = Invoke-CbmCli @(
     'cli', 'search_graph', '--json',
     '{"project":"smoke-review","query":"run_cli","limit":3}'
 )
 if ($searchOut -notmatch 'run_cli') { throw "search_graph did not find run_cli" }
 
 Write-Host "==> smoke: get_architecture" -ForegroundColor Cyan
-$archOut = Invoke-CbrlmCli @(
+$archOut = Invoke-CbmCli @(
     'cli', 'get_architecture', '--json',
     '{"project":"smoke-review"}'
 )
@@ -80,7 +80,7 @@ foreach ($edge in @("CALLS", "CONTAINS", "IMPORTS")) {
 }
 
 Write-Host "==> smoke: query_graph edge diversity" -ForegroundColor Cyan
-$queryOut = Invoke-CbrlmCliStdout @(
+$queryOut = Invoke-CbmCliStdout @(
     'cli', 'query_graph', '--json', '--quiet',
     '{"project":"smoke-review","query":"SELECT edge_type, COUNT(*) AS count FROM edges GROUP BY edge_type"}'
 )

@@ -76,32 +76,32 @@ artifact_name() {
         x86_64|amd64) arch="x64" ;;
         aarch64|arm64) arch="arm64" ;;
       esac
-      echo "cbrlm-${os}-${arch}"
+      echo "cbm-${os}-${arch}"
       ;;
-    x86_64-unknown-linux-gnu) echo "cbrlm-linux-x64" ;;
-    aarch64-unknown-linux-gnu) echo "cbrlm-linux-arm64" ;;
-    aarch64-unknown-linux-musl) echo "cbrlm-linux-arm64-musl" ;;
-    x86_64-pc-windows-msvc) echo "cbrlm-windows-x64" ;;
-    aarch64-apple-darwin) echo "cbrlm-macos-arm64" ;;
-    x86_64-apple-darwin) echo "cbrlm-macos-x64" ;;
-    *) echo "cbrlm-$1" ;;
+    x86_64-unknown-linux-gnu) echo "cbm-linux-x64" ;;
+    aarch64-unknown-linux-gnu) echo "cbm-linux-arm64" ;;
+    aarch64-unknown-linux-musl) echo "cbm-linux-arm64-musl" ;;
+    x86_64-pc-windows-msvc) echo "cbm-windows-x64" ;;
+    aarch64-apple-darwin) echo "cbm-macos-arm64" ;;
+    x86_64-apple-darwin) echo "cbm-macos-x64" ;;
+    *) echo "cbm-$1" ;;
   esac
 }
 
 binary_path() {
   local target="$1"
   if [ "$target" = "native" ]; then
-    if [ "$(uname -s)" = "MINGW"* ] || [ "$(uname -s)" = "MSYS"* ] || [ -f "$ROOT/target/release/cbrlm.exe" ]; then
-      echo "$ROOT/target/release/cbrlm.exe"
+    if [ "$(uname -s)" = "MINGW"* ] || [ "$(uname -s)" = "MSYS"* ] || [ -f "$ROOT/target/release/cbm.exe" ]; then
+      echo "$ROOT/target/release/cbm.exe"
     else
-      echo "$ROOT/target/release/cbrlm"
+      echo "$ROOT/target/release/cbm"
     fi
     return
   fi
   if [[ "$target" == *"windows"* ]]; then
-    echo "$ROOT/target/$target/release/cbrlm.exe"
+    echo "$ROOT/target/$target/release/cbm.exe"
   else
-    echo "$ROOT/target/$target/release/cbrlm"
+    echo "$ROOT/target/$target/release/cbm"
   fi
 }
 
@@ -135,7 +135,7 @@ for target in "${TARGETS[@]}"; do
 done
 
 {
-  echo "# CBRLM release checksums"
+  echo "# CBM release checksums"
   for f in "$ROOT/dist"/*.sha256; do
     [ -f "$f" ] && cat "$f"
   done

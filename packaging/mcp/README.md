@@ -1,12 +1,12 @@
-# CBRLM MCP package
+# CBM MCP package
 
-This directory is the handoff package for agents and MCP clients that want to use CBRLM as `cbrlm-mcp`.
+This directory is the handoff package for agents and MCP clients that want to use CBM as `cbm-mcp`.
 
-Server name: `cbrlm-mcp`
+Server name: `cbm-mcp`
 
 Transport: stdio
 
-Binary: `cbrlm` or an absolute path to `cbrlm.exe` / `cbrlm`
+Binary: `cbm` or an absolute path to `cbm.exe` / `cbm`
 
 ## Fast path
 
@@ -14,7 +14,7 @@ Build or install the binary first:
 
 ```powershell
 cargo build --release
-.\target\release\cbrlm.exe install --yes --all
+.\target\release\cbm.exe install --yes --all
 ```
 
 Then restart the target agent.
@@ -33,18 +33,18 @@ Use these templates when an agent cannot run the installer:
 | `claude-settings.json` | Claude Code / Claude Desktop-style settings |
 | `manifest.json` | Machine-readable package summary for agents |
 
-Replace `{{CBRLM_BINARY}}` with an absolute binary path.
+Replace `{{CBM_BINARY}}` with an absolute binary path.
 
 Windows example:
 
 ```text
-C:\Users\you\.config\cbrlm\bin\cbrlm.exe
+C:\Users\you\.config\cbm\bin\cbm.exe
 ```
 
 Unix example:
 
 ```text
-/home/you/.config/cbrlm/bin/cbrlm
+/home/you/.config/cbm/bin/cbm
 ```
 
 `opencode.json` uses a direct command array. If your OpenCode setup keeps the server under an existing `cbm` key, update that key's `command` value instead of adding a second server.
@@ -55,20 +55,20 @@ All templates include:
 
 ```json
 {
-  "CBRLM_PROJECT_PREFIX": "cbrlm+",
-  "CBRLM_AGENT": "generic"
+  "CBM_PROJECT_PREFIX": "cbm+",
+  "CBM_AGENT": "generic"
 }
 ```
 
-Agents may change `CBRLM_AGENT` to their own slug, for example `codex`, `opencode`, or `claude-code`.
+Agents may change `CBM_AGENT` to their own slug, for example `codex`, `opencode`, or `claude-code`.
 
 ## Smoke test
 
 After wiring an MCP client, verify the server exposes tools:
 
 ```powershell
-.\target\release\cbrlm.exe --version
-.\target\release\cbrlm.exe cli list_projects --json --quiet "{}"
+.\target\release\cbm.exe --version
+.\target\release\cbm.exe cli list_projects --json --quiet "{}"
 .\scripts\smoke-release-artifact.ps1 -SkipBuild
 ```
 

@@ -1,4 +1,4 @@
-# CBRLM Rust Parity Matrix
+# CBM Rust Parity Matrix
 
 Status key: **Done** | **Partial** | **MVP** | **Not started** | **Omitted**
 
@@ -19,15 +19,15 @@ Last updated: 2026-06-12 (Section 7 review applied).
 
 ## Core platform
 
-| Feature | Reference | Rust (`cbrlm`) | Status |
+| Feature | Reference | Rust (`CBM`) | Status |
 |---------|-----------|----------------|--------|
 | MCP stdio server | Yes | Yes | Done |
-| CLI tool dispatch | Yes | Yes (`cbrlm cli --json --quiet`) | Done |
+| CLI tool dispatch | Yes | Yes (`CBM cli --json --quiet`) | Done |
 | Agent install/uninstall | Yes | Yes (OpenCode, Codex, Claude, …) | Done |
 | Hooks (augment, session-start) | Yes | Yes | Done |
 | SQLite graph store | Yes | Yes | Done |
 | Compressed artifact persistence | Yes | Yes (`.codebase-memory/graph.db.zst`) | Done |
-| Project naming (`cbrlm+` prefix) | Yes | Yes (path hash slug) | Done |
+| Project naming (`CBM+` prefix) | Yes | Yes (path hash slug) | Done |
 | HTTP graph UI | Yes | Yes (search, node details, edge filters) | MVP |
 | Watcher / auto-reindex | Yes | Yes (backoff + dirty signature) | Done |
 | Graceful shutdown / cancel | Yes | Ctrl+C stops watcher/HTTP | MVP |

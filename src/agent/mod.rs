@@ -62,22 +62,22 @@ impl AgentKind {
             Self::OpenCode => home.join(".opencode"),
             Self::Zed => home.join(".zed"),
             Self::Aider => home.join(".aider"),
-            _ => home.join(".config").join("cbrlm"),
+            _ => home.join(".config").join("cbm"),
         })
     }
 
     pub fn mcp_config_snippet(&self) -> serde_json::Value {
         let bin = std::env::current_exe()
             .map(|p| p.to_string_lossy().to_string())
-            .unwrap_or_else(|_| "cbrlm".into());
+            .unwrap_or_else(|_| "cbm".into());
         serde_json::json!({
             "mcpServers": {
-                "cbrlm-mcp": {
+                "cbm-mcp": {
                     "command": bin,
                     "args": [],
                     "env": {
-                        "CBRLM_AGENT": self.slug(),
-                        "CBRLM_PROJECT_PREFIX": "cbrlm+"
+                        "CBM_AGENT": self.slug(),
+                        "CBM_PROJECT_PREFIX": "cbm+"
                     }
                 }
             }

@@ -1,8 +1,8 @@
-# CBRLM - Codebase RLM Memory MCP (Rust)
+# CBM - Codebase Memory MCP (Rust)
 
-CBRLM is a Rust MCP server and CLI for indexing codebases into a local knowledge graph for AI coding agents. It is designed for OpenCode, Codex, Claude Code, and other MCP-capable developer tools.
+CBM is a Rust MCP server and CLI for indexing codebases into a local knowledge graph for AI coding agents. It is designed for OpenCode, Codex, Claude Code, and other MCP-capable developer tools.
 
-This repository is a Rust MVP rewrite of `cbrlm-mcp`. It is usable for agent workflows today, but it is not a full reference replica. SQLite is the canonical store in this Rust version; FoundationDB is intentionally omitted.
+This repository is a Rust MVP rewrite of `cbrlm-mcp` (now CBM). It is usable for agent workflows today, but it is not a full reference replica. SQLite is the canonical store; FoundationDB is intentionally omitted.
 
 Reference material: [`../knowledge-graph/`](../knowledge-graph/)
 
@@ -20,7 +20,7 @@ Parity status: [`PARITY_MATRIX.md`](PARITY_MATRIX.md)
 | Agent install hooks | OpenCode, Codex, Claude-style configs |
 | MCP handoff package | `packaging/mcp/` templates and manifest |
 | Graph store | SQLite + optional `.codebase-memory/graph.db.zst` export |
-| Semantic edges | Optional via `CBRLM_SEMANTIC_ENABLED=1` |
+| Semantic edges | Optional via `CBM_SEMANTIC_ENABLED=1` |
 | Full reference parity | Not complete; see `PARITY_MATRIX.md` backlog |
 
 ## For Humans
@@ -30,14 +30,14 @@ Use this path when you want to build, install, test, or inspect the tool yoursel
 ### Build
 
 ```powershell
-cd D:\cbm\cbrlm
+cd D:\cbm
 cargo build --release
 ```
 
 Binary paths:
 
-- Windows: `target\release\cbrlm.exe`
-- Linux/macOS: `target/release/cbrlm`
+- Windows: `target\release\cbm.exe`
+- Linux/macOS: `target/release/cbm`
 
 ### Run Quality Gates
 
@@ -63,17 +63,17 @@ cargo build --release
 ### Index This Repository
 
 ```powershell
-.\target\release\cbrlm.exe cli index_repository --json --quiet '{"repo_path":".","project":"cbrlm-review","mode":"full","persistence":false}'
+.\target\release\cbm.exe cli index_repository --json --quiet '{"repo_path":".","project":"cbm-review","mode":"full","persistence":false}'
 ```
 
-Project names are stored with a `cbrlm+` prefix. For example, `cbrlm-review` becomes `cbrlm+cbrlm-review`.
+Project names are stored with a `cbm+` prefix. For example, `cbm-review` becomes `cbm+cbm-review`.
 
 ### Search The Graph
 
 ```powershell
-.\target\release\cbrlm.exe cli search_graph --json --quiet '{"project":"cbrlm-review","query":"handler","limit":10}'
-.\target\release\cbrlm.exe cli search_graph --json --quiet '{"project":"cbrlm-review","relationship":"CALLS","label":"Function"}'
-.\target\release\cbrlm.exe cli trace_path --json --quiet '{"project":"cbrlm-review","function_name":"run_cli","direction":"both","depth":2}'
+.\target\release\cbm.exe cli search_graph --json --quiet '{"project":"cbm-review","query":"handler","limit":10}'
+.\target\release\cbm.exe cli search_graph --json --quiet '{"project":"cbm-review","relationship":"CALLS","label":"Function"}'
+.\target\release\cbm.exe cli trace_path --json --quiet '{"project":"cbm-review","function_name":"run_cli","direction":"both","depth":2}'
 ```
 
 `name_pattern` and `qn_pattern` use regex. `file_pattern` uses glob. Paginated responses include `has_more`.
@@ -81,7 +81,7 @@ Project names are stored with a `cbrlm+` prefix. For example, `cbrlm-review` bec
 ### Run MCP Server
 
 ```powershell
-.\target\release\cbrlm.exe
+.\target\release\cbm.exe
 ```
 
 The stdio transport follows the MCP specification: one JSON-RPC message per
@@ -90,30 +90,30 @@ line. Legacy `Content-Length` framed clients remain supported for compatibility.
 With the optional graph UI:
 
 ```powershell
-.\target\release\cbrlm.exe --ui --port 9749
+.\target\release\cbm.exe --ui --port 9749
 ```
 
 ### Install Into Agent Config
 
 ```powershell
-.\target\release\cbrlm.exe install --yes
-.\target\release\cbrlm.exe install --dry-run --all
-.\target\release\cbrlm.exe uninstall --yes
+.\target\release\cbm.exe install --yes
+.\target\release\cbm.exe install --dry-run --all
+.\target\release\cbm.exe uninstall --yes
 ```
 
 Default install copies the current binary into a stable per-user location first:
 
 ```text
-%USERPROFILE%\.config\cbrlm\bin\cbrlm.exe
+%USERPROFILE%\.config\cbm\bin\cbm.exe
 ```
 
-Agent configs should point at that stable binary, not at a git clone's `target\release` path. This matters because `cargo clean`, deleting the clone, or rebuilding elsewhere can invalidate `target\release\cbrlm.exe`.
+Agent configs should point at that stable binary, not at a git clone's `target\release` path. This matters because `cargo clean`, deleting the clone, or rebuilding elsewhere can invalidate `target\release\cbm.exe`.
 
 OpenCode notes:
 
 - Existing `.config\opencode\opencode.jsonc` and `.config\opencode\opencode.json` files are detected even when the current shell cannot identify itself as OpenCode.
 - Existing `mcp.cbm` entries are updated in place to the stable binary path.
-- New OpenCode configs use the MCP server name `cbrlm-mcp`.
+- New OpenCode configs use the MCP server name `cbm-mcp`.
 
 Platform helper scripts:
 
@@ -122,12 +122,12 @@ Platform helper scripts:
 
 ### Package As MCP For Other Agents
 
-CBRLM is packaged as the MCP server `cbrlm-mcp`.
+CBM is packaged as the MCP server `cbm-mcp`.
 
 Automatic install:
 
 ```powershell
-.\target\release\cbrlm.exe install --yes --all
+.\target\release\cbm.exe install --yes --all
 ```
 
 Manual handoff package:
@@ -142,7 +142,7 @@ packaging/mcp/
   claude-settings.json
 ```
 
-Use `packaging/mcp/manifest.json` when an agent wants a machine-readable package summary. Use the config templates when an MCP client needs manual setup. Replace `{{CBRLM_BINARY}}` with the absolute path to the built or installed binary.
+Use `packaging/mcp/manifest.json` when an agent wants a machine-readable package summary. Use the config templates when an MCP client needs manual setup. Replace `{{CBM_BINARY}}` with the absolute path to the built or installed binary.
 
 ### Release Packaging
 
@@ -178,7 +178,7 @@ Prefer graph-native discovery over broad text search:
 Recommended local index command:
 
 ```powershell
-.\target\release\cbrlm.exe cli index_repository --json --quiet '{"repo_path":".","project":"cbrlm-local","mode":"full","persistence":false}'
+.\target\release\cbm.exe cli index_repository --json --quiet '{"repo_path":".","project":"cbm-local","mode":"full","persistence":false}'
 ```
 
 ### Required Verification Before Claiming Done
@@ -230,23 +230,23 @@ For Linux/macOS-only edits, use the `.sh` smoke script where appropriate.
 - `--quiet` suppresses tracing logs and is recommended for scripts.
 
 ```powershell
-cbrlm cli index_repository --json --quiet '{"repo_path":".","project":"x","mode":"fast"}' 2>$null
+cbm cli index_repository --json --quiet '{"repo_path":".","project":"x","mode":"fast"}' 2>$null
 ```
 
-`rlm_scan` sessions persist under `%LOCALAPPDATA%\cbrlm-mcp\rlm-sessions` or `CBRLM_CACHE_DIR`, so `rlm_chunk` works across separate CLI invocations.
+`rlm_scan` sessions persist under `%LOCALAPPDATA%\cbm-mcp\rlm-sessions` or `CBM_CACHE_DIR`, so `rlm_chunk` works across separate CLI invocations.
 
 ## Environment Variables
 
 | Variable | Purpose |
 |----------|---------|
-| `CBRLM_CACHE_DIR` | Override SQLite/cache location |
-| `CBRLM_SEMANTIC_ENABLED=1` | Enable semantic vector pass and semantic edges |
-| `CBRLM_PERSISTENCE=1` | Export/import `.codebase-memory/graph.db.zst` |
-| `CBRLM_WATCHER=0` | Disable background reindex watcher |
-| `CBRLM_UI=1` | Enable HTTP graph UI |
-| `CBRLM_PORT` | HTTP UI port, default `9749` |
-| `CBRLM_PROFILE=1` | Log per-phase index timings |
-| `CBRLM_MEMORY_BUDGET_MB` | Max memory budget for file indexing, default `512` |
+| `CBM_CACHE_DIR` | Override SQLite/cache location |
+| `CBM_SEMANTIC_ENABLED=1` | Enable semantic vector pass and semantic edges |
+| `CBM_PERSISTENCE=1` | Export/import `.codebase-memory/graph.db.zst` |
+| `CBM_WATCHER=0` | Disable background reindex watcher |
+| `CBM_UI=1` | Enable HTTP graph UI |
+| `CBM_PORT` | HTTP UI port, default `9749` |
+| `CBM_PROFILE=1` | Log per-phase index timings |
+| `CBM_MEMORY_BUDGET_MB` | Max memory budget for file indexing, default `512` |
 
 ## MCP Tools
 

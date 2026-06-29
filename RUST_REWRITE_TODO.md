@@ -1,7 +1,7 @@
 # Rust Rewrite TODO
 
 This file translates the current review findings into an implementation TODO list
-for agents working on the Rust rewrite of `cbrlm-mcp`.
+for agents working on the Rust rewrite of `CBM-mcp`.
 
 Reference material:
 
@@ -12,7 +12,7 @@ Reference material:
 
 Current Rust project:
 
-- `D:\cbm\cbrlm`
+- `D:\cbm\CBM`
 
 Goal:
 
@@ -273,7 +273,7 @@ Required work:
 
 Acceptance criteria:
 
-- Each supported package path can install and run `cbrlm --version`.
+- Each supported package path can install and run `CBM --version`.
 - Wrapper installers verify checksums and block path traversal.
 - Unsupported packaging channels are listed in a roadmap with status.
 
@@ -296,7 +296,7 @@ Required work:
 
 Acceptance criteria:
 
-- `CBM_PROFILE` / `CBRLM_PROFILE` or equivalent produces useful timing data.
+- `CBM_PROFILE` / `CBM_PROFILE` or equivalent produces useful timing data.
 - Large indexing can be cancelled gracefully.
 - Memory budget behavior is documented and tested at a small synthetic scale.
 
@@ -525,7 +525,7 @@ Required work:
 
 - Derive project name from the full canonical path.
 - Use a readable slug plus short hash.
-- Preserve `cbrlm+` prefix behavior.
+- Preserve `CBM+` prefix behavior.
 - Add compatibility handling for old names if needed.
 
 Acceptance criteria:
@@ -649,7 +649,7 @@ Do not claim full Rust rewrite parity until:
 5. Community detection pass with architecture summary (TODO 1.5).
 6. HTTP UI search, node details panel, architecture stats wiring (TODO 1.9).
 7. Packaging checksum verification and deferred-channels documentation (TODO 1.10).
-8. Runtime profiling (`CBRLM_PROFILE`) and memory budget (`CBRLM_MEMORY_BUDGET_MB`) (TODO 1.11).
+8. Runtime profiling (`CBM_PROFILE`) and memory budget (`CBM_MEMORY_BUDGET_MB`) (TODO 1.11).
 9. AST-aware CALLS for Rust with regex fallback (TODO 2.2 slice).
 
 Quality gates from Section 4 still apply after each slice.
@@ -678,18 +678,18 @@ MVP rewrite is complete (Sections 3–6). Full reference parity remains in `PARI
 
 ### TODO 6.1 - Fix CLI `rlm_scan` Session Usability
 
-Status: **Done** (2026-06-12) — disk persistence under `CBRLM_CACHE_DIR/rlm-sessions`, TTL/size limits, integration test.
+Status: **Done** (2026-06-12) — disk persistence under `CBM_CACHE_DIR/rlm-sessions`, TTL/size limits, integration test.
 
 Priority: `P1`
 
 Observation:
 
 - `rlm_scan` works inside one running process, which is appropriate for MCP server sessions.
-- In CLI mode, `cbrlm cli rlm_scan ...` returns a `session_id`, but a later `cbrlm cli rlm_chunk ...` cannot read it because each CLI call creates a new in-memory `RlmEngine`.
+- In CLI mode, `CBM cli rlm_scan ...` returns a `session_id`, but a later `CBM cli rlm_chunk ...` cannot read it because each CLI call creates a new in-memory `RlmEngine`.
 - Repro:
-  - Run `cbrlm cli rlm_scan --json '{"path":"."}'`.
+  - Run `CBM cli rlm_scan --json '{"path":"."}'`.
   - Copy the returned `session_id`.
-  - Run `cbrlm cli rlm_chunk --json '{"session_id":"<id>","limit":1}'`.
+  - Run `CBM cli rlm_chunk --json '{"session_id":"<id>","limit":1}'`.
   - Result: `session not found`.
 
 Recommended work:
@@ -773,7 +773,7 @@ Recommended work:
 - Add a release smoke command that:
   - Builds release artifacts.
   - Extracts the produced archive into a temp directory.
-  - Runs `cbrlm --version`.
+  - Runs `CBM --version`.
   - Runs one CLI smoke command from the extracted binary.
   - Verifies checksum files match the archive.
 - On Windows, also smoke `packaging/windows/install.ps1` against a local artifact if possible.
@@ -848,7 +848,7 @@ Recommended work:
 
 Acceptance criteria:
 
-- `cbrlm cli ... --json > out.json` always creates parseable JSON.
+- `CBM cli ... --json > out.json` always creates parseable JSON.
 - Combined-stream behavior is documented for PowerShell users.
 
 ### TODO 6.8 - Add Full-Parity Backlog Items Explicitly
@@ -896,8 +896,8 @@ Context:
   - `.\scripts\smoke-quality-gates.ps1 -SkipBuild`
   - `.\scripts\smoke-release-artifact.ps1 -SkipBuild`
 - A real two-process CLI smoke also passed:
-  - `cbrlm cli rlm_scan --json --quiet ...`
-  - `cbrlm cli rlm_chunk --json --quiet ...`
+  - `CBM cli rlm_scan --json --quiet ...`
+  - `CBM cli rlm_chunk --json --quiet ...`
 
 The Rust MVP now behaves much more like a usable CBM replacement. The remaining items below are not blockers for the current MVP, but they are important before claiming stronger full-reference parity or release-grade automation.
 
@@ -910,8 +910,8 @@ Priority: `P1`
 Observation:
 
 - `scripts/smoke-release-artifact.ps1` works locally after `cargo build --release`.
-- In `.github/workflows/release.yml`, the Windows matrix builds `target/${{ matrix.target }}/release/cbrlm.exe`.
-- The smoke script currently assumes `target\release\cbrlm.exe` and hard-codes `cbrlm-windows-x64`.
+- In `.github/workflows/release.yml`, the Windows matrix builds `target/${{ matrix.target }}/release/CBM.exe`.
+- The smoke script currently assumes `target\release\CBM.exe` and hard-codes `CBM-windows-x64`.
 - This can make the release workflow repackage or look for the wrong binary path when run inside the target matrix.
 
 Recommended work:
@@ -926,7 +926,7 @@ Recommended work:
 
 Acceptance criteria:
 
-- Windows release workflow validates `dist/${{ matrix.artifact }}.zip` without depending on `target\release\cbrlm.exe`.
+- Windows release workflow validates `dist/${{ matrix.artifact }}.zip` without depending on `target\release\CBM.exe`.
 - Local `.\scripts\smoke-release-artifact.ps1 -SkipBuild` still works.
 
 ### TODO 7.2 - Add `cargo fmt --check` To CI And Smoke Gates
@@ -968,7 +968,7 @@ Recommended work:
 
 - Add an integration test using `assert_cmd` or equivalent.
 - Verify:
-  - `cbrlm cli list_projects --json --quiet` writes parseable JSON to stdout.
+  - `CBM cli list_projects --json --quiet` writes parseable JSON to stdout.
   - stderr is empty or explicitly documented.
   - normal `--json` keeps stdout parseable even if diagnostics go to stderr.
 
@@ -1052,7 +1052,7 @@ Recommended work:
 - Add release smoke steps for:
   - `scripts\install.ps1 -DryRun` or `packaging\windows\install.ps1` against the extracted binary.
   - MCP stdio `initialize` and `tools/list` using the extracted binary.
-- Keep side effects isolated to a temp `CBRLM_CACHE_DIR` and temp config HOME when possible.
+- Keep side effects isolated to a temp `CBM_CACHE_DIR` and temp config HOME when possible.
 
 Acceptance criteria:
 

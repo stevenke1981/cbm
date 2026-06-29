@@ -152,7 +152,7 @@ impl Pipeline {
             store.set_meta("git_head", &h)?;
         }
         store.set_meta("index_mode", &format!("{:?}", self.mode).to_lowercase())?;
-        store.set_meta("semantic_enabled", &semantic::is_enabled().to_string())?;
+        store.set_meta("semantic_enabled", &semantic::is_semantic_enabled().to_string())?;
         store.checkpoint()?;
         let artifact_path =
             maybe_export_artifact(&repo_path, &project_name, &store, self.export_artifact)?;
@@ -278,7 +278,7 @@ impl Pipeline {
 
         store.upsert_symbols_batch(&all_symbols)?;
         let (call_edges, semantic) = finalize_index(&store, repo_path, project_name, self.mode)?;
-        store.set_meta("semantic_enabled", &semantic::is_enabled().to_string())?;
+        store.set_meta("semantic_enabled", &semantic::is_semantic_enabled().to_string())?;
         store.checkpoint()?;
         let artifact_path =
             maybe_export_artifact(repo_path, project_name, &store, self.export_artifact)?;
@@ -498,7 +498,7 @@ mod tests {
     fn with_isolated_cache() -> (std::sync::MutexGuard<'static, ()>, tempfile::TempDir) {
         let guard = test_lock::acquire();
         let dir = tempfile::TempDir::new().unwrap();
-        std::env::set_var("CBRLM_CACHE_DIR", dir.path());
+        std::env::set_var("CBM_CACHE_DIR", dir.path());
         (guard, dir)
     }
 
@@ -578,7 +578,7 @@ mod tests {
     #[test]
     fn semantic_pass_stores_vectors_and_edges() {
         let (_guard, _cache) = with_isolated_cache();
-        std::env::set_var("CBRLM_SEMANTIC_ENABLED", "1");
+        std::env::set_var("CBM_SEMANTIC_ENABLED", "1");
 
         let repo = tempfile::TempDir::new().unwrap();
         std::fs::write(
@@ -599,6 +599,6 @@ mod tests {
         let store = Store::open(&result.project).unwrap();
         assert!(store.count_vectors().unwrap() >= 2);
 
-        std::env::remove_var("CBRLM_SEMANTIC_ENABLED");
+        std::env::remove_var("CBM_SEMANTIC_ENABLED");
     }
 }

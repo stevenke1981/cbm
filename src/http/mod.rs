@@ -28,10 +28,10 @@ impl UiConfig {
     pub fn from_env_and_args(ui_flag: bool, port: u16) -> Self {
         let enabled = ui_flag
             || matches!(
-                std::env::var("CBRLM_UI").as_deref(),
+                std::env::var("CBM_UI").as_deref(),
                 Ok("1") | Ok("true") | Ok("yes") | Ok("on")
             );
-        let port = std::env::var("CBRLM_PORT")
+        let port = std::env::var("CBM_PORT")
             .ok()
             .and_then(|p| p.parse().ok())
             .unwrap_or(port);
@@ -61,7 +61,7 @@ impl HttpServer {
             let rt = tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
                 .worker_threads(2)
-                .thread_name("cbrlm-http")
+                .thread_name("cbm-http")
                 .build()
                 .expect("tokio runtime");
 
@@ -135,7 +135,7 @@ async fn index() -> Html<&'static str> {
 }
 
 async fn api_health() -> impl IntoResponse {
-    Json(serde_json::json!({ "status": "ok", "server": "cbrlm-ui" }))
+    Json(serde_json::json!({ "status": "ok", "server": "cbm-ui" }))
 }
 
 async fn api_projects() -> impl IntoResponse {

@@ -1,7 +1,7 @@
 use base64::{engine::general_purpose::STANDARD, Engine};
 use lz4_flex::{compress_prepend_size, decompress_size_prepended};
 
-const PREFIX: &str = "CBRLM_LZ4:";
+const PREFIX: &str = "CBM_LZ4:";
 const MIN_COMPRESS_BYTES: usize = 2048;
 
 pub fn maybe_compress(content: &str) -> String {

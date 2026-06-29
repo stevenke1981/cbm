@@ -8,7 +8,7 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 pub const MCP_SERVER_NAME: &str = SERVER_NAME;
-pub const INSTALL_DIR_NAME: &str = "cbrlm";
+pub const INSTALL_DIR_NAME: &str = "cbm";
 
 #[derive(Debug, Clone, Default)]
 pub struct InstallOptions {
@@ -50,7 +50,7 @@ pub fn default_install_dir() -> PathBuf {
 }
 
 pub fn installed_binary_path() -> PathBuf {
-    let name = if cfg!(windows) { "cbrlm.exe" } else { "cbrlm" };
+    let name = if cfg!(windows) { "cbm.exe" } else { "cbm" };
     default_install_dir().join(name)
 }
 
@@ -134,7 +134,7 @@ pub fn run_uninstall(opts: &UninstallOptions) -> Result<UninstallReport> {
     let mut removed = Vec::new();
     let mut skipped = Vec::new();
 
-    if !opts.yes && !opts.dry_run && !confirm("uninstall cbrlm-mcp integration?")? {
+    if !opts.yes && !opts.dry_run && !confirm("uninstall cbm-mcp integration?")? {
         eprintln!("cancelled");
         return Ok(UninstallReport { removed, skipped });
     }
@@ -206,7 +206,7 @@ fn resolve_source_binary(override_path: Option<&Path>) -> Result<PathBuf> {
     if current.is_file() {
         return Ok(current);
     }
-    Err(Error::Other("could not resolve cbrlm binary path".into()))
+    Err(Error::Other("could not resolve cbm binary path".into()))
 }
 
 fn install_binary(source: &Path, dest: &Path) -> Result<()> {
@@ -306,7 +306,7 @@ fn all_targets() -> Vec<AgentTarget> {
         },
         AgentTarget {
             kind: AgentKind::Unknown,
-            config_path: ".config/cbrlm/mcp.json",
+            config_path: ".config/cbm/mcp.json",
             format: ConfigFormat::FallbackJson,
             create_if_missing: true,
         },
@@ -391,8 +391,8 @@ fn confirm(prompt: &str) -> Result<bool> {
 
 fn mcp_env(agent: AgentKind) -> Map<String, Value> {
     let mut env = Map::new();
-    env.insert("CBRLM_PROJECT_PREFIX".into(), json!("cbrlm+"));
-    env.insert("CBRLM_AGENT".into(), json!(agent.slug()));
+    env.insert("CBM_PROJECT_PREFIX".into(), json!("cbm+"));
+    env.insert("CBM_AGENT".into(), json!(agent.slug()));
     env
 }
 
@@ -519,7 +519,7 @@ fn write_codex_config(path: &Path, binary: &Path, agent: AgentKind) -> Result<bo
     let section_header = format!("[mcp_servers.{MCP_SERVER_NAME}]");
     let bin = binary.to_string_lossy().replace('\\', "/");
     let block = format!(
-        "\n{section_header}\ncommand = \"{bin}\"\nargs = []\n\n[mcp_servers.{MCP_SERVER_NAME}.env]\nCBRLM_PROJECT_PREFIX = \"cbrlm+\"\nCBRLM_AGENT = \"{}\"\n",
+        "\n{section_header}\ncommand = \"{bin}\"\nargs = []\n\n[mcp_servers.{MCP_SERVER_NAME}.env]\nCBM_PROJECT_PREFIX = \"cbm+\"\nCBM_AGENT = \"{}\"\n",
         agent.slug()
     );
     let content = content.trim_end().to_string() + &block;
@@ -527,10 +527,10 @@ fn write_codex_config(path: &Path, binary: &Path, agent: AgentKind) -> Result<bo
     Ok(true)
 }
 
-const HOOK_GATE_PS1: &str = include_str!("../../hooks/cbrlm-code-discovery-gate.ps1");
-const HOOK_GATE_SH: &str = include_str!("../../hooks/cbrlm-code-discovery-gate.sh");
-const HOOK_SESSION_PS1: &str = include_str!("../../hooks/cbrlm-session-reminder.ps1");
-const HOOK_SESSION_SH: &str = include_str!("../../hooks/cbrlm-session-reminder.sh");
+const HOOK_GATE_PS1: &str = include_str!("../../hooks/cbm-code-discovery-gate.ps1");
+const HOOK_GATE_SH: &str = include_str!("../../hooks/cbm-code-discovery-gate.sh");
+const HOOK_SESSION_PS1: &str = include_str!("../../hooks/cbm-session-reminder.ps1");
+const HOOK_SESSION_SH: &str = include_str!("../../hooks/cbm-session-reminder.sh");
 
 fn install_hooks(binary: &Path, opts: &InstallOptions) -> Result<bool> {
     if opts.dry_run {
@@ -545,12 +545,12 @@ fn install_hooks(binary: &Path, opts: &InstallOptions) -> Result<bool> {
 
     let bin_str = binary.to_string_lossy().replace('\\', "/");
     for (name, template) in [
-        ("cbrlm-code-discovery-gate.ps1", HOOK_GATE_PS1),
-        ("cbrlm-session-reminder.ps1", HOOK_SESSION_PS1),
-        ("cbrlm-code-discovery-gate.sh", HOOK_GATE_SH),
-        ("cbrlm-session-reminder.sh", HOOK_SESSION_SH),
+        ("cbm-code-discovery-gate.ps1", HOOK_GATE_PS1),
+        ("cbm-session-reminder.ps1", HOOK_SESSION_PS1),
+        ("cbm-code-discovery-gate.sh", HOOK_GATE_SH),
+        ("cbm-session-reminder.sh", HOOK_SESSION_SH),
     ] {
-        let content = template.replace("{{CBRLM_BIN}}", &bin_str);
+        let content = template.replace("{{CBM_BIN}}", &bin_str);
         let dest = hooks_dir().join(name);
         fs::create_dir_all(hooks_dir())?;
         fs::write(&dest, content)?;
@@ -566,12 +566,12 @@ fn install_hooks(binary: &Path, opts: &InstallOptions) -> Result<bool> {
     let claude_dir = claude_hooks_dir();
     fs::create_dir_all(&claude_dir)?;
     for (name, template) in [
-        ("cbrlm-code-discovery-gate.ps1", HOOK_GATE_PS1),
-        ("cbrlm-session-reminder.ps1", HOOK_SESSION_PS1),
-        ("cbrlm-code-discovery-gate", HOOK_GATE_SH),
-        ("cbrlm-session-reminder", HOOK_SESSION_SH),
+        ("cbm-code-discovery-gate.ps1", HOOK_GATE_PS1),
+        ("cbm-session-reminder.ps1", HOOK_SESSION_PS1),
+        ("cbm-code-discovery-gate", HOOK_GATE_SH),
+        ("cbm-session-reminder", HOOK_SESSION_SH),
     ] {
-        let content = template.replace("{{CBRLM_BIN}}", &bin_str);
+        let content = template.replace("{{CBM_BIN}}", &bin_str);
         let dest = claude_dir.join(name);
         fs::write(&dest, content)?;
         #[cfg(unix)]
@@ -597,8 +597,8 @@ fn configure_claude_hooks(binary: &Path, opts: &InstallOptions) -> Result<()> {
         );
         return Ok(());
     }
-    let gate = hook_command(binary, "cbrlm-code-discovery-gate");
-    let session = hook_command(binary, "cbrlm-session-reminder");
+    let gate = hook_command(binary, "cbm-code-discovery-gate");
+    let session = hook_command(binary, "cbm-session-reminder");
     upsert_claude_hooks(&settings, &gate, &session)
 }
 
@@ -660,7 +660,7 @@ fn upsert_claude_hooks(settings_path: &Path, gate_cmd: &str, session_cmd: &str) 
                         .and_then(|h| h.get("command"))
                         .and_then(|c| c.as_str())
                         .unwrap_or("");
-                    !cmd.contains("cbrlm-code-discovery-gate")
+                    !cmd.contains("cbm-code-discovery-gate")
                 })
                 .cloned()
                 .collect()
@@ -690,7 +690,7 @@ fn upsert_claude_hooks(settings_path: &Path, gate_cmd: &str, session_cmd: &str) 
                         .and_then(|h| h.get("command"))
                         .and_then(|c| c.as_str())
                         .unwrap_or("");
-                    !cmd.contains("cbrlm-session-reminder")
+                    !cmd.contains("cbm-session-reminder")
                 })
                 .cloned()
                 .collect()
@@ -753,7 +753,7 @@ fn remove_claude_hooks() -> Result<()> {
                 .and_then(|h| h.get("command"))
                 .and_then(|c| c.as_str())
                 .unwrap_or("");
-            !cmd.contains("cbrlm-code-discovery-gate")
+            !cmd.contains("cbm-code-discovery-gate")
         });
     }
     if let Some(session) = hooks.get_mut("SessionStart").and_then(|v| v.as_array_mut()) {
@@ -765,7 +765,7 @@ fn remove_claude_hooks() -> Result<()> {
                 .and_then(|h| h.get("command"))
                 .and_then(|c| c.as_str())
                 .unwrap_or("");
-            !cmd.contains("cbrlm-session-reminder")
+            !cmd.contains("cbm-session-reminder")
         });
     }
     write_json_pretty(&path, &Value::Object(root))?;
@@ -959,7 +959,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let cfg = dir.path().join("opencode.jsonc");
         fs::write(&cfg, r#"{"model":"test"}"#).unwrap();
-        let bin = dir.path().join("cbrlm.exe");
+        let bin = dir.path().join("cbm.exe");
         fs::write(&bin, b"").unwrap();
 
         write_opencode_config(&cfg, &bin, AgentKind::OpenCode).unwrap();
@@ -979,7 +979,7 @@ mod tests {
   "mcp": {
     "cbm": {
       "type": "local",
-      "command": ["C:\\repo\\target\\release\\cbrlm.exe"],
+      "command": ["C:\\repo\\target\\release\\cbm.exe"],
       "enabled": true,
       "timeout": 120000
     }
@@ -987,7 +987,7 @@ mod tests {
 }"#,
         )
         .unwrap();
-        let bin = dir.path().join("stable").join("cbrlm.exe");
+        let bin = dir.path().join("stable").join("cbm.exe");
         fs::create_dir_all(bin.parent().unwrap()).unwrap();
         fs::write(&bin, b"").unwrap();
 
@@ -1000,17 +1000,17 @@ mod tests {
             Some(bin.to_string_lossy().as_ref())
         );
         assert_eq!(
-            parsed["mcp"]["cbm"]["environment"]["CBRLM_AGENT"].as_str(),
+            parsed["mcp"]["cbm"]["environment"]["CBM_AGENT"].as_str(),
             Some("opencode")
         );
     }
 
     #[test]
     fn removes_existing_codex_section() {
-        let input = "model = \"gpt\"\n\n[mcp_servers.cbrlm-mcp]\ncommand = \"old\"\n\n[features]\nhooks = true\n";
+        let input = "model = \"gpt\"\n\n[mcp_servers.cbm-mcp]\ncommand = \"old\"\n\n[features]\nhooks = true\n";
         let out = remove_codex_mcp_section(input, MCP_SERVER_NAME);
         assert!(!out.contains("old"));
-        assert!(!out.contains("[mcp_servers.cbrlm-mcp]"));
+        assert!(!out.contains("[mcp_servers.cbm-mcp]"));
         assert!(out.contains("model = \"gpt\""));
         assert!(out.contains("[features]"));
     }
@@ -1020,13 +1020,13 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let cfg = dir.path().join("config.toml");
         fs::write(&cfg, "model = \"gpt\"\n").unwrap();
-        let bin = dir.path().join("cbrlm");
+        let bin = dir.path().join("cbm");
         fs::write(&bin, b"").unwrap();
 
         write_codex_config(&cfg, &bin, AgentKind::Codex).unwrap();
         let text = fs::read_to_string(&cfg).unwrap();
         assert!(text.contains(&format!("[mcp_servers.{MCP_SERVER_NAME}]")));
-        assert!(text.contains("CBRLM_PROJECT_PREFIX"));
+        assert!(text.contains("CBM_PROJECT_PREFIX"));
         assert!(text.contains("model = \"gpt\""));
     }
 
@@ -1035,7 +1035,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let cfg = dir.path().join("settings.json");
         fs::write(&cfg, r#"{"hooks":{}}"#).unwrap();
-        let bin = dir.path().join("cbrlm.exe");
+        let bin = dir.path().join("cbm.exe");
         fs::write(&bin, b"").unwrap();
 
         write_mcp_servers_json(&cfg, &bin, AgentKind::ClaudeCode).unwrap();
@@ -1047,7 +1047,7 @@ mod tests {
     #[test]
     fn default_install_dir_under_config() {
         let dir = default_install_dir();
-        assert!(dir.to_string_lossy().contains("cbrlm"));
+        assert!(dir.to_string_lossy().contains("cbm"));
         assert!(dir.ends_with("bin"));
     }
 }

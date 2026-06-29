@@ -6,7 +6,7 @@ use crate::watcher::Watcher;
 use serde_json::{json, Value};
 use std::sync::Arc;
 
-pub const SERVER_NAME: &str = "cbrlm-mcp";
+pub const SERVER_NAME: &str = "cbm-mcp";
 pub const SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub struct McpServer {
@@ -111,7 +111,7 @@ impl McpServer {
                 "version": SERVER_VERSION
             },
             "instructions": format!(
-                "Rust CBRLM server. Index first with index_repository. RLM: rlm_workflow → filter → map → reduce. Projects use cbrlm+ prefix. Git watcher: {watcher_on}."
+                "CBM server. Index first with index_repository. RLM: rlm_workflow → filter → map → reduce. Projects use cbm+ prefix. Git watcher: {watcher_on}."
             )
         })
     }
@@ -138,7 +138,7 @@ impl McpServer {
 
 fn watcher_enabled() -> bool {
     !matches!(
-        std::env::var("CBRLM_WATCHER").as_deref(),
+        std::env::var("CBM_WATCHER").as_deref(),
         Ok("0") | Ok("false") | Ok("off")
     )
 }
@@ -171,8 +171,8 @@ mod tests {
 
     #[test]
     fn handles_initialize() {
-        std::env::set_var("CBRLM_WATCHER", "0");
-        std::env::set_var("CBRLM_UI", "0");
+        std::env::set_var("CBM_WATCHER", "0");
+        std::env::set_var("CBM_UI", "0");
         let server = McpServer::new();
         let req = json!({
             "jsonrpc": "2.0",
@@ -181,13 +181,13 @@ mod tests {
             "params": {}
         });
         let resp = server.handle_message(&req.to_string()).unwrap().unwrap();
-        assert!(resp.contains("cbrlm-mcp"));
+        assert!(resp.contains("cbm-mcp"));
     }
 
     #[test]
     fn lists_tools() {
-        std::env::set_var("CBRLM_WATCHER", "0");
-        std::env::set_var("CBRLM_UI", "0");
+        std::env::set_var("CBM_WATCHER", "0");
+        std::env::set_var("CBM_UI", "0");
         let server = McpServer::new();
         let req = json!({
             "jsonrpc": "2.0",

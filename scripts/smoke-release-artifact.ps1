@@ -6,13 +6,13 @@
 #
 # Usage (CI matrix — archive already packaged):
 #   .\scripts\smoke-release-artifact.ps1 -SkipBuild -SkipPackage `
-#     -ArtifactName cbrlm-windows-x64 `
-#     -ArchivePath dist\cbrlm-windows-x64.zip
+#     -ArtifactName cbm-windows-x64 `
+#     -ArchivePath dist\cbm-windows-x64.zip
 
 param(
     [switch]$SkipBuild,
     [switch]$SkipPackage,
-    [string]$ArtifactName = "cbrlm-windows-x64",
+    [string]$ArtifactName = "cbm-windows-x64",
     [string]$BinaryPath = "",
     [string]$ArchivePath = "",
     [switch]$SkipMcpSmoke,
@@ -35,7 +35,7 @@ if (-not $SkipBuild) {
 }
 
 if (-not $BinaryPath) {
-    $BinaryPath = Join-Path $Root "target\release\cbrlm.exe"
+    $BinaryPath = Join-Path $Root "target\release\cbm.exe"
 }
 
 if (-not $SkipPackage) {
@@ -58,12 +58,12 @@ if ($actual -ne $expected) {
     throw "checksum mismatch (expected $expected, got $actual)"
 }
 
-$Extract = Join-Path $env:TEMP "cbrlm-smoke-release"
+$Extract = Join-Path $env:TEMP "cbm-smoke-release"
 if (Test-Path $Extract) { Remove-Item $Extract -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $Extract | Out-Null
 Expand-Archive -Path $Zip -DestinationPath $Extract -Force
 
-$Extracted = Join-Path $Extract "cbrlm.exe"
+$Extracted = Join-Path $Extract "cbm.exe"
 if (-not (Test-Path $Extracted)) { throw "extracted binary missing" }
 
 function Read-McpLine([System.IO.Stream]$Stream) {
@@ -85,7 +85,7 @@ function Invoke-McpSmoke([string]$Binary) {
     $psi.RedirectStandardInput = $true
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError = $true
-    $psi.Environment["CBRLM_WATCHER"] = "0"
+    $psi.Environment["CBM_WATCHER"] = "0"
     $proc = [System.Diagnostics.Process]::Start($psi)
 
     try {
@@ -106,15 +106,15 @@ function Invoke-McpSmoke([string]$Binary) {
     }
 }
 
-$SmokeCache = Join-Path $env:TEMP "cbrlm-smoke-cache"
+$SmokeCache = Join-Path $env:TEMP "cbm-smoke-cache"
 if (Test-Path $SmokeCache) { Remove-Item $SmokeCache -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $SmokeCache | Out-Null
-$env:CBRLM_CACHE_DIR = $SmokeCache
-$env:CBRLM_WATCHER = "0"
+$env:CBM_CACHE_DIR = $SmokeCache
+$env:CBM_WATCHER = "0"
 
 Write-Host "==> smoke extracted binary" -ForegroundColor Cyan
 & $Extracted --version
-if ($LASTEXITCODE -ne 0) { throw "cbrlm --version failed" }
+if ($LASTEXITCODE -ne 0) { throw "cbm --version failed" }
 
 $indexJson = '{"repo_path":".","project":"smoke-artifact","mode":"fast","persistence":false}'
 $indexOut = & $Extracted @('cli','index_repository','--json','--quiet',$indexJson) 2>$null
