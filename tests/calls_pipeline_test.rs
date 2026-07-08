@@ -2,13 +2,13 @@
 
 mod support;
 
-use cbrlm::discover::IndexMode;
-use cbrlm::pipeline::Pipeline;
-use cbrlm::store::Store;
+use cbm::discover::IndexMode;
+use cbm::pipeline::Pipeline;
+use cbm::store::Store;
 use support::isolated_cache;
 use tempfile::TempDir;
 
-fn calls_edges(store: &Store) -> Vec<cbrlm::store::Edge> {
+fn calls_edges(store: &Store) -> Vec<cbm::store::Edge> {
     store
         .list_edges_limited(500)
         .unwrap()
@@ -51,7 +51,7 @@ fn python_pipeline_resolves_local_call() {
         "expected regex method metadata"
     );
 
-    let _ = cbrlm::store::delete_project_db(&index.project);
+    let _ = cbm::store::delete_project_db(&index.project);
 }
 
 #[test]
@@ -69,7 +69,7 @@ fn javascript_pipeline_resolves_local_call() {
     let store = Store::open(&index.project).unwrap();
     assert!(has_call(&store, "main.js", "main", "helper"));
 
-    let _ = cbrlm::store::delete_project_db(&index.project);
+    let _ = cbm::store::delete_project_db(&index.project);
 }
 
 #[test]
@@ -98,7 +98,7 @@ fn rust_pipeline_resolves_call_with_ast_metadata() {
         "expected AST method metadata for Rust"
     );
 
-    let _ = cbrlm::store::delete_project_db(&index.project);
+    let _ = cbm::store::delete_project_db(&index.project);
 }
 
 #[test]
@@ -122,7 +122,7 @@ fn pipeline_skips_ambiguous_cross_file_calls() {
         "ambiguous cross-file helper should not link: {main_calls:?}"
     );
 
-    let _ = cbrlm::store::delete_project_db(&index.project);
+    let _ = cbm::store::delete_project_db(&index.project);
 }
 
 #[test]
@@ -147,5 +147,5 @@ fn nested_python_function_does_not_false_positive_outer() {
         "outer should not call itself: {edges:?}"
     );
 
-    let _ = cbrlm::store::delete_project_db(&index.project);
+    let _ = cbm::store::delete_project_db(&index.project);
 }

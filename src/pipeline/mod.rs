@@ -152,7 +152,10 @@ impl Pipeline {
             store.set_meta("git_head", &h)?;
         }
         store.set_meta("index_mode", &format!("{:?}", self.mode).to_lowercase())?;
-        store.set_meta("semantic_enabled", &semantic::is_semantic_enabled().to_string())?;
+        store.set_meta(
+            "semantic_enabled",
+            &semantic::is_semantic_enabled().to_string(),
+        )?;
         store.checkpoint()?;
         let artifact_path =
             maybe_export_artifact(&repo_path, &project_name, &store, self.export_artifact)?;
@@ -278,7 +281,10 @@ impl Pipeline {
 
         store.upsert_symbols_batch(&all_symbols)?;
         let (call_edges, semantic) = finalize_index(&store, repo_path, project_name, self.mode)?;
-        store.set_meta("semantic_enabled", &semantic::is_semantic_enabled().to_string())?;
+        store.set_meta(
+            "semantic_enabled",
+            &semantic::is_semantic_enabled().to_string(),
+        )?;
         store.checkpoint()?;
         let artifact_path =
             maybe_export_artifact(repo_path, project_name, &store, self.export_artifact)?;

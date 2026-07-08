@@ -355,7 +355,9 @@ impl Store {
         }
         // Build placeholders: (?1, project=const) → we need one ? per QN
         // Use dynamic SQL: SELECT ... WHERE qualified_name IN (?, ?, ...) AND project = ?
-        let placeholders: Vec<String> = qns.iter().enumerate()
+        let placeholders: Vec<String> = qns
+            .iter()
+            .enumerate()
             .map(|(i, _)| format!("?{}", i + 1))
             .collect();
         let sql = format!(
@@ -372,12 +374,16 @@ impl Store {
         }
         param_values.push(Box::new(self.project.clone()));
 
-        let params_ref: Vec<&dyn rusqlite::types::ToSql> = param_values.iter().map(|p| p.as_ref()).collect();
+        let params_ref: Vec<&dyn rusqlite::types::ToSql> =
+            param_values.iter().map(|p| p.as_ref()).collect();
         let rows = stmt
             .query_map(params_ref.as_slice(), symbol_from_row)?
             .collect::<std::result::Result<Vec<Symbol>, _>>()?;
 
-        Ok(rows.into_iter().map(|s| (s.qualified_name.clone(), s)).collect())
+        Ok(rows
+            .into_iter()
+            .map(|s| (s.qualified_name.clone(), s))
+            .collect())
     }
 
     pub fn search(&self, filter: &SearchFilter) -> Result<SearchResult> {
@@ -420,9 +426,11 @@ impl Store {
         );
 
         // Prepend the project parameter (always at ?1)
-        let mut all_params: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(self.project.clone())];
+        let mut all_params: Vec<Box<dyn rusqlite::types::ToSql>> =
+            vec![Box::new(self.project.clone())];
         all_params.extend(param_values);
-        let params_ref: Vec<&dyn rusqlite::types::ToSql> = all_params.iter().map(|p| p.as_ref()).collect();
+        let params_ref: Vec<&dyn rusqlite::types::ToSql> =
+            all_params.iter().map(|p| p.as_ref()).collect();
 
         let mut stmt = self.conn.prepare(&sql)?;
         let pre_filtered: Vec<Symbol> = stmt
@@ -1004,11 +1012,11 @@ fn apply_sqlite_pragmas(conn: &Connection) -> Result<()> {
     )?;
     // cache_size and temp_store: use rusqlite pragma_update (which correctly
     // handles result rows) instead of execute_batch / execute.
-    conn.pragma_update(None, "cache_size", -64_000)?;  // 64 MB page cache
-    conn.pragma_update(None, "temp_store", "MEMORY")?;  // temp tables in memory
+    conn.pragma_update(None, "cache_size", -64_000)?; // 64 MB page cache
+    conn.pragma_update(None, "temp_store", "MEMORY")?; // temp tables in memory
+
     // mmap_size: respect env var override, else use a sensible default (256 MB)
-    let mmap = sqlite_mmap_size()
-        .or_else(default_mmap_size);
+    let mmap = sqlite_mmap_size().or_else(default_mmap_size);
     if let Some(size) = mmap {
         conn.execute_batch(&format!("PRAGMA mmap_size = {size}"))?;
     }

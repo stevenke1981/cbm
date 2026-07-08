@@ -1,8 +1,8 @@
 mod support;
 
-use cbrlm::hooks::extract_token;
-use cbrlm::project::{normalize_project_name, project_db_path};
-use cbrlm::store::{Store, Symbol};
+use cbm::hooks::extract_token;
+use cbm::project::{normalize_project_name, project_db_path};
+use cbm::store::{Store, Symbol};
 use support::isolated_cache;
 
 #[test]
@@ -26,7 +26,7 @@ fn hook_augment_query_finds_indexed_symbols() {
 
     let pattern = ".*handleAuth.*";
     let result = store
-        .search(&cbrlm::store::SearchFilter {
+        .search(&cbm::store::SearchFilter {
             name_pattern: Some(pattern.into()),
             limit: 5,
             ..Default::default()

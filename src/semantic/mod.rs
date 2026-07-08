@@ -252,8 +252,9 @@ pub fn vector_search(
             continue;
         };
         let target_tokens = tokenize(&symbol_document(sym));
-        let pair_corpus = Corpus::from_documents(&[query_profile.tokens.clone(), target_tokens]);
-        let target_vec = Vector::from_tokens(&tokenize(&symbol_document(sym)), &pair_corpus, &qn);
+        let pair_corpus =
+            Corpus::from_documents(&[query_profile.tokens.clone(), target_tokens.clone()]);
+        let target_vec = Vector::from_tokens(&target_tokens, &pair_corpus, &qn);
         let target_profile = SymbolProfile::from_symbol(sym);
         let breakdown = signals::score_pair(
             &query_profile,

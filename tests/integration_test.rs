@@ -1,10 +1,10 @@
 mod support;
 
-use cbrlm::discover::IndexMode;
-use cbrlm::mcp::McpServer;
-use cbrlm::pipeline::Pipeline;
-use cbrlm::project::normalize_project_name;
-use cbrlm::store::{SearchFilter, Store};
+use cbm::discover::IndexMode;
+use cbm::mcp::McpServer;
+use cbm::pipeline::Pipeline;
+use cbm::project::normalize_project_name;
+use cbm::store::{SearchFilter, Store};
 use serde_json::json;
 use std::fs;
 use std::sync::Arc;
@@ -58,7 +58,7 @@ def transform(data):
 fn indexes_fixture_repository() {
     let (_guard, _cache, _) = isolated_cache();
     let dir = fixture_repo();
-    let project = "cbrlm+test-fixture";
+    let project = "cbm+test-fixture";
     let pipeline = Pipeline::new(IndexMode::Full);
     let result = pipeline
         .run(dir.path(), Some("test-fixture"))
@@ -74,7 +74,7 @@ fn indexes_fixture_repository() {
     assert!(arch.symbol_count >= 4);
     assert!(arch.file_count >= 2);
 
-    let _ = cbrlm::store::delete_project_db(project);
+    let _ = cbm::store::delete_project_db(project);
 }
 
 #[test]
@@ -125,13 +125,13 @@ fn search_and_trace_call_graph() {
     let snippet = store.get_snippet(&start).unwrap();
     assert!(snippet.snippet.contains("greet"));
 
-    let _ = cbrlm::store::delete_project_db(&index.project);
+    let _ = cbm::store::delete_project_db(&index.project);
 }
 
 #[test]
 fn mcp_tools_call_index_and_search() {
     let (_guard, _cache, _) = isolated_cache();
-    std::env::set_var("CBRLM_WATCHER", "0");
+    std::env::set_var("CBM_WATCHER", "0");
     let dir = fixture_repo();
     let server = McpServer::new();
 
@@ -186,13 +186,13 @@ fn mcp_tools_call_index_and_search() {
         .unwrap();
     assert!(resp.contains("filter"));
 
-    let _ = cbrlm::store::delete_project_db(&normalize_project_name("mcp-test"));
+    let _ = cbm::store::delete_project_db(&normalize_project_name("mcp-test"));
 }
 
 #[test]
 fn rlm_scan_and_chunk() {
     let (_guard, _cache, _) = isolated_cache();
-    std::env::set_var("CBRLM_WATCHER", "0");
+    std::env::set_var("CBM_WATCHER", "0");
     let dir = fixture_repo();
     let server = McpServer::new();
 
@@ -218,8 +218,8 @@ fn cli_rlm_scan_chunk_persists_across_invocations() {
     let dir = fixture_repo();
     let path = dir.path().to_string_lossy().to_string();
 
-    let rlm1 = Arc::new(cbrlm::rlm::RlmEngine::new());
-    let handler1 = cbrlm::mcp::ToolHandler::new(rlm1, None);
+    let rlm1 = Arc::new(cbm::rlm::RlmEngine::new());
+    let handler1 = cbm::mcp::ToolHandler::new(rlm1, None);
     let scan = handler1
         .handle("rlm_scan", &json!({ "path": path }))
         .expect("rlm_scan");
@@ -228,8 +228,8 @@ fn cli_rlm_scan_chunk_persists_across_invocations() {
         .and_then(|v| v.as_str())
         .expect("session_id");
 
-    let rlm2 = Arc::new(cbrlm::rlm::RlmEngine::new());
-    let handler2 = cbrlm::mcp::ToolHandler::new(rlm2, None);
+    let rlm2 = Arc::new(cbm::rlm::RlmEngine::new());
+    let handler2 = cbm::mcp::ToolHandler::new(rlm2, None);
     let chunk = handler2
         .handle(
             "rlm_chunk",
@@ -279,7 +279,7 @@ fn ingest_runtime_traces() {
 
     assert!(store.count_edges_by_type("RUNTIME_TRACE").unwrap() >= 1);
 
-    let _ = cbrlm::store::delete_project_db(&index.project);
+    let _ = cbm::store::delete_project_db(&index.project);
 }
 
 #[test]
@@ -309,7 +309,7 @@ fn emits_contains_imports_and_calls_edges() {
     assert!(store.count_edges_by_type("CONTAINS").unwrap() > 0);
     assert!(store.count_edges_by_type("CALLS").unwrap() > 0);
 
-    let _ = cbrlm::store::delete_project_db(&index.project);
+    let _ = cbm::store::delete_project_db(&index.project);
 }
 
 #[test]
@@ -331,7 +331,7 @@ fn search_graph_regex_name_pattern() {
         "regex name_pattern should match greet"
     );
 
-    let _ = cbrlm::store::delete_project_db(&index.project);
+    let _ = cbm::store::delete_project_db(&index.project);
 }
 
 #[test]
@@ -371,7 +371,7 @@ fn search_graph_relationship_and_degree_filters() {
         .implemented_edge_types
         .contains(&"CONTAINS".to_string()));
 
-    let _ = cbrlm::store::delete_project_db(&index.project);
+    let _ = cbm::store::delete_project_db(&index.project);
 }
 
 #[test]
@@ -394,13 +394,13 @@ fn search_graph_has_more_pagination() {
         assert_eq!(page.symbols.len(), 2);
     }
 
-    let _ = cbrlm::store::delete_project_db(&index.project);
+    let _ = cbm::store::delete_project_db(&index.project);
 }
 
 #[test]
 fn semantic_pass_emits_edges_with_signal_breakdown() {
     let (_guard, _cache, _) = isolated_cache();
-    std::env::set_var("CBRLM_SEMANTIC_ENABLED", "1");
+    std::env::set_var("CBM_SEMANTIC_ENABLED", "1");
 
     let dir = tempfile::TempDir::new().unwrap();
     std::fs::write(
@@ -430,8 +430,8 @@ fn semantic_pass_emits_edges_with_signal_breakdown() {
             .is_some_and(|p| p.contains("signals"))
     }));
 
-    std::env::remove_var("CBRLM_SEMANTIC_ENABLED");
-    let _ = cbrlm::store::delete_project_db(&index.project);
+    std::env::remove_var("CBM_SEMANTIC_ENABLED");
+    let _ = cbm::store::delete_project_db(&index.project);
 }
 
 #[test]
@@ -449,7 +449,7 @@ fn emits_inherits_edge_for_python_class() {
     let store = Store::open(&index.project).unwrap();
     assert!(store.count_edges_by_type("INHERITS").unwrap() >= 1);
 
-    let _ = cbrlm::store::delete_project_db(&index.project);
+    let _ = cbm::store::delete_project_db(&index.project);
 }
 
 #[test]
@@ -467,7 +467,7 @@ fn emits_http_route_for_python_handler() {
     let store = Store::open(&index.project).unwrap();
     assert!(store.count_edges_by_type("HTTP_ROUTE").unwrap() >= 1);
 
-    let _ = cbrlm::store::delete_project_db(&index.project);
+    let _ = cbm::store::delete_project_db(&index.project);
 }
 
 #[test]
@@ -480,7 +480,7 @@ fn architecture_reports_communities() {
     let arch = store.get_architecture().unwrap();
     assert!(arch.community_count >= 1);
 
-    let _ = cbrlm::store::delete_project_db(&index.project);
+    let _ = cbm::store::delete_project_db(&index.project);
 }
 
 #[test]
@@ -494,5 +494,5 @@ fn store_readonly_and_integrity_check() {
     assert!(ro.integrity_check().unwrap().eq_ignore_ascii_case("ok"));
     assert!(ro.count_symbols().unwrap_or(0) > 0);
 
-    let _ = cbrlm::store::delete_project_db(&index.project);
+    let _ = cbm::store::delete_project_db(&index.project);
 }

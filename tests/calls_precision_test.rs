@@ -1,6 +1,6 @@
-use cbrlm::pipeline::{build_name_registry, resolve_calls_with_registry};
-use cbrlm::store::Symbol;
-use cbrlm::symbol_id::qualified_name;
+use cbm::pipeline::{build_name_registry, resolve_calls_with_registry};
+use cbm::store::Symbol;
+use cbm::symbol_id::qualified_name;
 
 fn function_sym(file: &str, name: &str, line: i64, end: i64) -> Symbol {
     Symbol {

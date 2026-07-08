@@ -3,8 +3,8 @@
 use assert_cmd::Command;
 use serde_json::Value;
 
-fn cbrlm() -> Command {
-    Command::cargo_bin("cbrlm").unwrap()
+fn cbm() -> Command {
+    Command::cargo_bin("cbm").unwrap()
 }
 
 fn parse_stdout_json(out: &[u8]) -> Option<Value> {
@@ -14,10 +14,10 @@ fn parse_stdout_json(out: &[u8]) -> Option<Value> {
 
 #[test]
 fn list_projects_json_quiet_stdout_is_parseable() {
-    let output = cbrlm()
+    let output = cbm()
         .args(["cli", "list_projects", "--json", "--quiet"])
         .output()
-        .expect("spawn cbrlm");
+        .expect("spawn cbm");
     assert!(output.status.success(), "exit failed: {:?}", output);
     assert!(
         output.stderr.is_empty(),
@@ -31,10 +31,10 @@ fn list_projects_json_quiet_stdout_is_parseable() {
 #[test]
 fn index_repository_json_stdout_parseable_with_stderr_diagnostics() {
     let json = r#"{"repo_path":".","project":"cli-process","mode":"fast","persistence":false}"#;
-    let output = cbrlm()
+    let output = cbm()
         .args(["cli", "index_repository", "--json", json])
         .output()
-        .expect("spawn cbrlm");
+        .expect("spawn cbm");
     assert!(output.status.success());
     let parsed = parse_stdout_json(&output.stdout).expect("stdout is not valid JSON");
     assert_eq!(parsed.get("success").and_then(|v| v.as_bool()), Some(true));
@@ -43,10 +43,10 @@ fn index_repository_json_stdout_parseable_with_stderr_diagnostics() {
 #[test]
 fn json_without_quiet_keeps_stdout_parseable() {
     let json = r#"{"repo_path":".","project":"cli-process-2","mode":"fast","persistence":false}"#;
-    let output = cbrlm()
+    let output = cbm()
         .args(["cli", "index_repository", "--json", json])
         .output()
-        .expect("spawn cbrlm");
+        .expect("spawn cbm");
     assert!(output.status.success());
     assert!(parse_stdout_json(&output.stdout).is_some());
 }
