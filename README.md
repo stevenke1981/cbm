@@ -291,12 +291,14 @@ cbm cli index_repository --json --quiet '{"repo_path":".","project":"x","mode":"
 - Core edges: `CONTAINS`, `IMPORTS`, `CALLS`, `INHERITS`, `IMPLEMENTS`, `DECORATES`, `HTTP_ROUTE`, `HTTP_CALLS`
 - Optional edges: `SIMILAR_TO`, `SEMANTICALLY_RELATED`, `RUNTIME_TRACE`
 - Communities: Louvain on CALLS/IMPORTS/INHERITS/IMPLEMENTS (per-symbol `community_id` + `community_algo`)
+- CALLS resolution: `same_file` → `import_map` → `same_directory` → `unique_name` (never ambiguous short names)
+- HTTP_CALLS: exact, template (`:id` / `{id}`), or suffix path match
 
 ## Languages
 
 Tree-sitter (extract + CALLS AST where applicable): **Rust, Python, JavaScript/TypeScript, Go, Java, C/C++, Ruby, C#, PHP, Bash, Kotlin, Swift**.
 
-Relative import path resolution for JS/TS/Python/Rust modules; regex fallbacks for other languages.
+Import resolution: relative paths, **tsconfig/jsconfig `paths` aliases**, Python package roots, Rust `mod`; external packages stay `Module` nodes.
 
 ## Project Layout
 
@@ -326,8 +328,7 @@ Keep the Rust MVP stable while closing full-parity gaps deliberately.
 
 High-value backlog areas:
 
-- Leiden/Louvain-grade communities.
-- `HTTP_CALLS` client-edge pass.
-- Store bulk transaction API and rollback tests.
-- Multi-language AST-aware CALLS beyond Rust.
-- Reference-grade semantic tuning.
+- Leiden multi-resolution communities (Louvain single-level is Done).
+- OpenAPI / richer HTTP route discovery beyond pattern templates.
+- Hybrid LSP type-aware CALLS (beyond FunctionRegistry heuristics).
+- Packaging channels (npm/scoop/winget) — see `packaging/DEFERRED_CHANNELS.md`.

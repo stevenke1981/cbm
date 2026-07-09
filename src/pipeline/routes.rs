@@ -169,7 +169,7 @@ pub fn extract_http_client_calls(
     out
 }
 
-/// Link client calls to HTTP_ROUTE nodes by path equality / suffix match.
+/// Link client calls to HTTP_ROUTE nodes by path equality / template / suffix match.
 pub fn link_http_calls(client_calls: &[HttpClientCall], route_edges: &[Edge]) -> Vec<Edge> {
     // route path from properties or Route qn
     let mut routes: Vec<(String, String)> = Vec::new(); // (path, route_qn)
@@ -192,14 +192,26 @@ pub fn link_http_calls(client_calls: &[HttpClientCall], route_edges: &[Edge]) ->
     let mut seen = HashSet::new();
     for call in client_calls {
         let key = normalize_route_key(&call.path);
-        let mut matched: Option<&String> = None;
+        let mut best: Option<(&String, &'static str)> = None;
         for (route_path, route_qn) in &routes {
-            if route_path == &key || route_path.ends_with(&key) || key.ends_with(route_path) {
-                matched = Some(route_qn);
+            if route_path == &key {
+                best = Some((route_qn, "exact"));
                 break;
             }
+            if paths_template_match(route_path, &key) {
+                best = Some((route_qn, "template"));
+                // keep looking for exact
+                continue;
+            }
+            if best.is_none()
+                && (route_path.ends_with(&key)
+                    || key.ends_with(route_path)
+                    || path_segments_compatible(route_path, &key))
+            {
+                best = Some((route_qn, "suffix"));
+            }
         }
-        let Some(route_qn) = matched else {
+        let Some((route_qn, conf)) = best else {
             continue;
         };
         let edge_key = (call.caller_qn.clone(), route_qn.clone());
@@ -212,7 +224,7 @@ pub fn link_http_calls(client_calls: &[HttpClientCall], route_edges: &[Edge]) ->
             dst_qn: route_qn.clone(),
             edge_type: "HTTP_CALLS".into(),
             properties_json: Some(format!(
-                r#"{{"path":"{}","method":"{}","line":{},"confidence":"path_match"}}"#,
+                r#"{{"path":"{}","method":"{}","line":{},"confidence":"{conf}"}}"#,
                 json_escape(&call.path),
                 json_escape(method),
                 call.line
@@ -220,6 +232,31 @@ pub fn link_http_calls(client_calls: &[HttpClientCall], route_edges: &[Edge]) ->
         });
     }
     edges
+}
+
+/// Match `/users/:id` or `/users/{id}` against `/users/42`.
+fn paths_template_match(template: &str, concrete: &str) -> bool {
+    let t: Vec<&str> = template.trim_matches('/').split('/').filter(|s| !s.is_empty()).collect();
+    let c: Vec<&str> = concrete.trim_matches('/').split('/').filter(|s| !s.is_empty()).collect();
+    if t.len() != c.len() {
+        return false;
+    }
+    t.iter().zip(c.iter()).all(|(tp, cp)| {
+        tp.starts_with(':')
+            || (tp.starts_with('{') && tp.ends_with('}'))
+            || tp.starts_with('<')
+            || *tp == *cp
+    })
+}
+
+fn path_segments_compatible(a: &str, b: &str) -> bool {
+    let sa: Vec<&str> = a.trim_matches('/').split('/').filter(|s| !s.is_empty()).collect();
+    let sb: Vec<&str> = b.trim_matches('/').split('/').filter(|s| !s.is_empty()).collect();
+    if sa.is_empty() || sb.is_empty() {
+        return false;
+    }
+    // share last static segment
+    sa.last() == sb.last() && sa.last().is_some_and(|s| s.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'))
 }
 
 fn path_from_route_qn(qn: &str) -> Option<String> {

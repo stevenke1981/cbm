@@ -154,7 +154,11 @@ impl IndexPass for ImportsPass {
     fn run(&self, ctx: &mut PassContext<'_>) -> Result<PassOutcome> {
         let files = ctx.store.list_files()?;
         let known: Vec<String> = files.iter().map(|f| f.path.clone()).collect();
-        let resolver = ImportResolver::new(known);
+        let mut contents = HashMap::new();
+        for f in &files {
+            contents.insert(f.path.clone(), f.content.clone());
+        }
+        let resolver = ImportResolver::from_project_files(known, &contents);
         let mut import_edges = Vec::new();
         for file in &files {
             import_edges.extend(resolver.extract(&file.path, &file.language, &file.content));

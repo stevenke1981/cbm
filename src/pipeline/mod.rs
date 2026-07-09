@@ -6,6 +6,7 @@ mod imports;
 mod inheritance;
 mod inheritance_ast;
 mod pass;
+mod registry;
 mod routes;
 mod structure;
 
@@ -14,6 +15,7 @@ pub use calls_ast::{AstCallProfile, AstCallResolver};
 pub use communities::*;
 pub use extract::*;
 pub use imports::{extract_import_edges, ImportResolver};
+pub use registry::{FunctionRegistry, Resolution, ResolveStrategy};
 pub use inheritance::{
     build_file_name_index, build_project_name_index, extract_inheritance_edges,
     extract_inheritance_edges_with_project, InheritancePipeline, InheritanceResolver,
@@ -390,8 +392,12 @@ fn finalize_index(
 }
 
 pub(crate) fn rebuild_call_edges(store: &Store, code_symbols: &[Symbol]) -> Result<Vec<crate::store::Edge>> {
-    let registry = build_name_registry(code_symbols);
+    use registry::{parse_import_files, FunctionRegistry};
+    use std::collections::HashSet;
+
+    let registry = FunctionRegistry::from_symbols(code_symbols);
     let files = store.list_files()?;
+    let known_files: HashSet<String> = files.iter().map(|f| f.path.replace('\\', "/")).collect();
     let symbols_by_file: HashMap<String, Vec<Symbol>> =
         code_symbols.iter().fold(HashMap::new(), |mut acc, sym| {
             acc.entry(sym.file_path.clone())
@@ -401,13 +407,16 @@ pub(crate) fn rebuild_call_edges(store: &Store, code_symbols: &[Symbol]) -> Resu
         });
 
     let mut edges = Vec::new();
-    for file in files {
+    for file in &files {
         if let Some(symbols) = symbols_by_file.get(&file.path) {
-            edges.extend(resolve_calls_with_registry(
+            let import_files =
+                parse_import_files(&file.path, &file.language, &file.content, &known_files);
+            edges.extend(resolve_calls_with_function_registry(
                 symbols,
                 &file.content,
                 &file.language,
                 &registry,
+                &import_files,
             ));
         }
     }

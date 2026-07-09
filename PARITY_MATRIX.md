@@ -5,7 +5,7 @@ Status key: **Done** | **Partial** | **MVP** | **Not started** | **Omitted**
 Primary reference: [DeusData/codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp) (C engine).
 Secondary notes: local `knowledge-graph/` architecture docs when present.
 
-Last updated: 2026-07-10 (INHERITS/IMPLEMENTS AST + cross-file resolve).
+Last updated: 2026-07-10 (FunctionRegistry import-map CALLS + tsconfig aliases).
 
 ## Status model
 
@@ -48,14 +48,14 @@ Last updated: 2026-07-10 (INHERITS/IMPLEMENTS AST + cross-file resolve).
 | Regex fallback extract | Yes | Yes | MVP |
 | Stable qualified names | Yes | Yes (`file::label::name@Lline`) | Done |
 | Structure nodes (Project/Folder/File) | Yes | Yes | Done |
-| Import edges | Yes | Path-resolving `ImportResolver` + external Module | Partial |
-| CALLS edges | Yes | AST: Rust/Py/JS/TS/Go/Java/C/C++/Ruby/C#/PHP/Bash + regex | Done (supported langs) |
+| Import edges | Yes | Path + tsconfig aliases + Python package roots | Partial |
+| CALLS edges | Yes | AST + `FunctionRegistry` (same_file/import_map/same_dir/unique) | Done |
 | Store bulk transaction / replace edges | Yes | `bulk_index`, `replace_edges_of_type(s)` | Done |
 | `search_code` FTS5 | Yes | `files_fts` virtual table + scan fallback | Done |
 | INHERITS / IMPLEMENTS | Yes | AST (Py/JS/TS/Java/Rust/Go/C++/Ruby) + regex fallback | Done (supported langs) |
 | DECORATES | Yes | Attribute patterns | Partial (heuristic) |
 | HTTP route pass | Yes | `HTTP_ROUTE` multi-framework patterns | Partial |
-| HTTP client→route | Yes | `HTTP_CALLS` path matching | MVP |
+| HTTP client→route | Yes | `HTTP_CALLS` exact/template/suffix matching | Partial |
 | Git history / cross-repo | Yes | Git HEAD + dirty detection only | Partial |
 | Community detection | Yes | Louvain modularity (default); components fallback | Done (Louvain) |
 | Post-processing summaries | Yes | `get_architecture` + communities | Partial |
@@ -65,14 +65,14 @@ Last updated: 2026-07-10 (INHERITS/IMPLEMENTS AST + cross-file resolve).
 | Edge type | Emitted | Notes |
 |-----------|---------|-------|
 | CONTAINS | Yes | Project → folder/file → symbols |
-| IMPORTS | Yes | Regex-based (heuristic) |
-| CALLS | Yes | Same-file-first; Rust AST where available |
+| IMPORTS | Yes | Relative + tsconfig aliases + Python package roots (heuristic for bare packages) |
+| CALLS | Yes | `FunctionRegistry`: same_file → import_map → same_dir → unique_name; AST where available |
 | SIMILAR_TO | When semantic enabled | Multi-signal scoring |
 | SEMANTICALLY_RELATED | When semantic enabled | Lower threshold pairs |
 | RUNTIME_TRACE | Yes | Via `ingest_traces` |
 | INHERITS / IMPLEMENTS / DECORATES | Yes | AST + regex; DECORATES still regex |
 | HTTP_ROUTE | Yes | Framework-limited patterns |
-| HTTP_CALLS | Yes | Path-match MVP |
+| HTTP_CALLS | Yes | Exact / `:id`/`{id}` template / suffix path match |
 
 ## MCP tools
 
@@ -157,6 +157,6 @@ A new agent should treat these as blockers before claiming equivalence with the 
 
 1. Regex/heuristic remains for imports (absolute packages), decorators, and languages without AST profiles.
 2. Community detection is Louvain single-level (not full Leiden multi-resolution).
-3. HTTP routes/calls are pattern/path limited (no OpenAPI/template expansion).
+3. HTTP routes/calls are pattern/path limited (segment template match only; no OpenAPI).
 4. No Hybrid LSP type resolution (C reference has 9 language families).
 5. FoundationDB and reference C foundation layer omitted by design.

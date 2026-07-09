@@ -587,6 +587,104 @@ fn store_readonly_and_integrity_check() {
 }
 
 #[test]
+fn import_map_resolves_cross_file_calls_js() {
+    let (_guard, _cache, _) = isolated_cache();
+    let dir = TempDir::new().unwrap();
+    fs::create_dir_all(dir.path().join("src")).unwrap();
+    fs::write(
+        dir.path().join("src/util.js"),
+        "export function helper() { return 1; }\nexport function helperDup() { return 2; }\n",
+    )
+    .unwrap();
+    fs::write(
+        dir.path().join("src/other.js"),
+        "export function helper() { return 9; }\n",
+    )
+    .unwrap();
+    fs::write(
+        dir.path().join("src/main.js"),
+        "import { helper } from './util';\nfunction main() { helper(); }\n",
+    )
+    .unwrap();
+
+    let pipeline = Pipeline::new(IndexMode::Full);
+    let index = pipeline.run(dir.path(), Some("import-map-calls")).unwrap();
+    let store = Store::open(&index.project).unwrap();
+    let edges = store.list_edges().unwrap();
+    let call = edges.iter().find(|e| {
+        e.edge_type == "CALLS"
+            && e.src_qn.contains("main.js")
+            && e.src_qn.contains("main@")
+            && e.dst_qn.contains("helper@")
+    });
+    assert!(call.is_some(), "expected main->helper CALLS: {edges:?}");
+    let call = call.unwrap();
+    assert!(
+        call.dst_qn.contains("util.js"),
+        "should resolve via import map to util.js, got {}",
+        call.dst_qn
+    );
+    assert!(
+        call.properties_json
+            .as_ref()
+            .is_some_and(|p| p.contains("import_map") || p.contains("same_file")),
+        "expected strategy metadata: {:?}",
+        call.properties_json
+    );
+
+    let _ = cbm::store::delete_project_db(&index.project);
+}
+
+#[test]
+fn tsconfig_alias_import_and_http_template_match() {
+    let (_guard, _cache, _) = isolated_cache();
+    let dir = TempDir::new().unwrap();
+    fs::create_dir_all(dir.path().join("src/util")).unwrap();
+    fs::write(
+        dir.path().join("tsconfig.json"),
+        r#"{ "compilerOptions": { "baseUrl": ".", "paths": { "@/*": ["src/*"] } } }"#,
+    )
+    .unwrap();
+    fs::write(
+        dir.path().join("src/util/helper.ts"),
+        "export function helper() { return 1; }\n",
+    )
+    .unwrap();
+    fs::write(
+        dir.path().join("src/main.ts"),
+        "import { helper } from '@/util/helper';\nexport function main() { helper(); }\n",
+    )
+    .unwrap();
+    fs::write(
+        dir.path().join("server.py"),
+        "@app.get(\"/users/{id}\")\ndef get_user():\n    return {}\n",
+    )
+    .unwrap();
+    fs::write(
+        dir.path().join("client.js"),
+        "function loadUser() {\n  fetch('/users/42');\n}\n",
+    )
+    .unwrap();
+
+    let pipeline = Pipeline::new(IndexMode::Full);
+    let index = pipeline.run(dir.path(), Some("alias-http")).unwrap();
+    let store = Store::open(&index.project).unwrap();
+    let edges = store.list_edges().unwrap();
+    assert!(
+        edges.iter().any(|e| {
+            e.edge_type == "IMPORTS" && e.dst_qn.contains("src/util/helper.ts::File::")
+        }),
+        "tsconfig alias IMPORTS missing: {edges:?}"
+    );
+    assert!(
+        store.count_edges_by_type("HTTP_CALLS").unwrap() >= 1,
+        "expected template HTTP_CALLS /users/{{id}} <- /users/42"
+    );
+
+    let _ = cbm::store::delete_project_db(&index.project);
+}
+
+#[test]
 fn resolves_relative_js_imports_to_file_nodes() {
     let (_guard, _cache, _) = isolated_cache();
     let dir = TempDir::new().unwrap();

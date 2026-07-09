@@ -3,8 +3,10 @@
 //! OOP design: each language is an [`AstCallProfile`]; [`AstCallResolver`] runs a
 //! shared match pipeline so Rust/Python/JS/TS/Go/Java/C/C++ share one code path.
 
+use super::calls::make_call_edge;
+use super::registry::FunctionRegistry;
 use crate::store::{Edge, Symbol};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use streaming_iterator::StreamingIterator;
 use tree_sitter::{Language, Parser, Query, QueryCursor};
 
@@ -252,7 +254,8 @@ impl AstCallResolver {
         &self,
         symbols: &[Symbol],
         content: &str,
-        registry: &HashMap<String, Vec<String>>,
+        registry: &FunctionRegistry,
+        import_files: &HashSet<String>,
     ) -> Option<Vec<Edge>> {
         let lang = self.profile.language();
         let mut parser = Parser::new();
@@ -261,14 +264,15 @@ impl AstCallResolver {
         }
         let tree = parser.parse(content, None)?;
         let query = Query::new(&lang, self.profile.query_src).ok()?;
-        Some(self.collect_edges(symbols, content, registry, &tree, &query))
+        Some(self.collect_edges(symbols, content, registry, import_files, &tree, &query))
     }
 
     fn collect_edges(
         &self,
         symbols: &[Symbol],
         content: &str,
-        registry: &HashMap<String, Vec<String>>,
+        registry: &FunctionRegistry,
+        import_files: &HashSet<String>,
         tree: &tree_sitter::Tree,
         query: &Query,
     ) -> Vec<Edge> {
@@ -309,22 +313,27 @@ impl AstCallResolver {
                 if callee == &sym.name {
                     continue;
                 }
-                let targets = super::pick_callees(callee, &sym.file_path, registry);
-                for dst in targets {
-                    if dst == sym.qualified_name {
+                let resolutions = registry.resolve(callee, &sym.file_path, import_files);
+                for res in resolutions {
+                    if res.qualified_name == sym.qualified_name {
                         continue;
                     }
-                    let key = (sym.qualified_name.clone(), dst.clone());
+                    let key = (sym.qualified_name.clone(), res.qualified_name.clone());
                     if seen.insert(key.clone()) {
-                        edges.push(Edge {
-                            src_qn: key.0,
-                            dst_qn: key.1,
-                            edge_type: "CALLS".into(),
-                            properties_json: Some(format!(
-                                r#"{{"confidence":"high","method":"ast","language":"{}"}}"#,
-                                self.profile.language_id
-                            )),
-                        });
+                        let mut edge = make_call_edge(&key.0, &key.1, "ast", res.strategy);
+                        // Enrich with language id
+                        if let Some(props) = edge.properties_json.as_mut() {
+                            if let Ok(mut v) = serde_json::from_str::<serde_json::Value>(props) {
+                                if let Some(obj) = v.as_object_mut() {
+                                    obj.insert(
+                                        "language".into(),
+                                        serde_json::json!(self.profile.language_id),
+                                    );
+                                }
+                                *props = v.to_string();
+                            }
+                        }
+                        edges.push(edge);
                     }
                 }
             }
@@ -404,10 +413,6 @@ mod tests {
         }
     }
 
-    fn registry(symbols: &[Symbol]) -> HashMap<String, Vec<String>> {
-        super::super::build_name_registry(symbols)
-    }
-
     #[test]
     fn python_ast_resolves_local_call() {
         let symbols = vec![
@@ -415,8 +420,11 @@ mod tests {
             function_sym("main.py", "main", 4, 5),
         ];
         let src = "def helper():\n    pass\n\ndef main():\n    helper()\n";
+        let reg = FunctionRegistry::from_symbols(&symbols);
         let r = AstCallResolver::for_language("python").unwrap();
-        let edges = r.try_resolve(&symbols, src, &registry(&symbols)).unwrap();
+        let edges = r
+            .try_resolve(&symbols, src, &reg, &HashSet::new())
+            .unwrap();
         assert!(edges.iter().any(|e| e.dst_qn.contains("helper")));
         assert!(edges[0]
             .properties_json
@@ -431,8 +439,11 @@ mod tests {
             function_sym("main.js", "main", 2, 2),
         ];
         let src = "function helper() {}\nfunction main() { helper(); }\n";
+        let reg = FunctionRegistry::from_symbols(&symbols);
         let r = AstCallResolver::for_language("javascript").unwrap();
-        let edges = r.try_resolve(&symbols, src, &registry(&symbols)).unwrap();
+        let edges = r
+            .try_resolve(&symbols, src, &reg, &HashSet::new())
+            .unwrap();
         assert_eq!(edges.len(), 1);
     }
 
@@ -443,8 +454,11 @@ mod tests {
             function_sym("main.go", "main", 3, 3),
         ];
         let src = "package main\nfunc helper() {}\nfunc main() { helper() }\n";
+        let reg = FunctionRegistry::from_symbols(&symbols);
         let r = AstCallResolver::for_language("go").unwrap();
-        let edges = r.try_resolve(&symbols, src, &registry(&symbols)).unwrap();
+        let edges = r
+            .try_resolve(&symbols, src, &reg, &HashSet::new())
+            .unwrap();
         assert_eq!(edges.len(), 1);
     }
 }

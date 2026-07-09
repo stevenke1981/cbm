@@ -9,21 +9,42 @@ use regex::Regex;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
+/// Path alias from tsconfig/jsconfig (`paths` + `baseUrl`).
+#[derive(Debug, Clone)]
+pub struct PathAlias {
+    /// Pattern prefix without trailing `*`, e.g. `@/` or `@app/`
+    pub prefix: String,
+    /// Target prefix(es), repo-relative, without trailing `*`
+    pub targets: Vec<String>,
+}
+
 /// OOP import resolver with a project file index for path resolution.
 pub struct ImportResolver {
     /// Normalized repo-relative paths (forward slashes).
     known_files: HashSet<String>,
     /// path without extension → full path (first wins).
     by_stem: HashMap<String, String>,
+    /// tsconfig/jsconfig path aliases
+    aliases: Vec<PathAlias>,
+    /// Python package roots (dirs containing `__init__.py`)
+    python_roots: Vec<String>,
 }
 
 impl ImportResolver {
     pub fn new(known_files: impl IntoIterator<Item = String>) -> Self {
+        Self::with_aliases(known_files, Vec::new())
+    }
+
+    pub fn with_aliases(
+        known_files: impl IntoIterator<Item = String>,
+        aliases: Vec<PathAlias>,
+    ) -> Self {
         let known_files: HashSet<String> = known_files
             .into_iter()
             .map(|p| p.replace('\\', "/"))
             .collect();
         let mut by_stem = HashMap::new();
+        let mut python_roots = Vec::new();
         for path in &known_files {
             let stem = strip_known_extension(path);
             by_stem.entry(stem).or_insert_with(|| path.clone());
@@ -38,11 +59,33 @@ impl ImportResolver {
             {
                 by_stem.entry(dir.to_string()).or_insert_with(|| path.clone());
             }
+            if path.ends_with("/__init__.py") || path == "__init__.py" {
+                let root = path
+                    .trim_end_matches("__init__.py")
+                    .trim_end_matches('/')
+                    .to_string();
+                if !root.is_empty() && !python_roots.contains(&root) {
+                    python_roots.push(root);
+                }
+            }
         }
+        python_roots.sort();
         Self {
             known_files,
             by_stem,
+            aliases,
+            python_roots,
         }
+    }
+
+    /// Build resolver and load tsconfig/jsconfig aliases from known file contents map.
+    pub fn from_project_files(
+        known_files: impl IntoIterator<Item = String>,
+        file_contents: &HashMap<String, String>,
+    ) -> Self {
+        let files: Vec<String> = known_files.into_iter().collect();
+        let aliases = load_ts_path_aliases(&files, file_contents);
+        Self::with_aliases(files, aliases)
     }
 
     pub fn extract(&self, file_path: &str, language: &str, content: &str) -> Vec<Edge> {
@@ -76,36 +119,28 @@ impl ImportResolver {
         // Relative / path-like imports
         if is_relative_or_path_import(specifier, language) {
             if let Some(resolved) = self.resolve_relative(file_path, language, specifier) {
-                let props = format!(
-                    r#"{{"specifier":"{}","resolved":"{}","kind":"{kind}","method":"path"}}"#,
-                    json_escape(specifier),
-                    json_escape(&resolved)
-                );
-                return (format!("{resolved}::File::{resolved}"), props);
+                return self.file_target(specifier, &resolved, kind, "path");
+            }
+        }
+
+        // TS/JS path aliases from tsconfig (`@/`, `@app/*`, …)
+        if matches!(language, "javascript" | "typescript" | "tsx" | "jsx") {
+            if let Some(resolved) = self.resolve_alias(specifier, language) {
+                return self.file_target(specifier, &resolved, kind, "alias");
             }
         }
 
         // Rust `mod foo` → sibling foo.rs / foo/mod.rs
         if language == "rust" && kind == "mod" {
             if let Some(resolved) = self.resolve_rust_mod(file_path, specifier) {
-                let props = format!(
-                    r#"{{"specifier":"{}","resolved":"{}","kind":"mod","method":"path"}}"#,
-                    json_escape(specifier),
-                    json_escape(&resolved)
-                );
-                return (format!("{resolved}::File::{resolved}"), props);
+                return self.file_target(specifier, &resolved, "mod", "path");
             }
         }
 
         // Python dotted package → package/module path if present
         if language == "python" && !specifier.starts_with('.') {
             if let Some(resolved) = self.resolve_python_absolute(specifier) {
-                let props = format!(
-                    r#"{{"specifier":"{}","resolved":"{}","kind":"{kind}","method":"path"}}"#,
-                    json_escape(specifier),
-                    json_escape(&resolved)
-                );
-                return (format!("{resolved}::File::{resolved}"), props);
+                return self.file_target(specifier, &resolved, kind, "path");
             }
         }
 
@@ -149,7 +184,52 @@ impl ImportResolver {
 
     fn resolve_python_absolute(&self, specifier: &str) -> Option<String> {
         let as_path = specifier.replace('.', "/");
-        self.lookup_file(&as_path, "python")
+        if let Some(p) = self.lookup_file(&as_path, "python") {
+            return Some(p);
+        }
+        // Try under known package roots
+        for root in &self.python_roots {
+            let candidate = format!("{root}/{as_path}");
+            if let Some(p) = self.lookup_file(&candidate, "python") {
+                return Some(p);
+            }
+        }
+        None
+    }
+
+    fn resolve_alias(&self, specifier: &str, language: &str) -> Option<String> {
+        for alias in &self.aliases {
+            if let Some(rest) = specifier.strip_prefix(&alias.prefix) {
+                for target in &alias.targets {
+                    let joined = if rest.is_empty() {
+                        target.clone()
+                    } else if target.ends_with('/') {
+                        format!("{target}{rest}")
+                    } else {
+                        format!("{target}/{rest}")
+                    };
+                    if let Some(p) = self.lookup_file(&joined, language) {
+                        return Some(p);
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    fn file_target(
+        &self,
+        specifier: &str,
+        resolved: &str,
+        kind: &str,
+        method: &str,
+    ) -> (String, String) {
+        let props = format!(
+            r#"{{"specifier":"{}","resolved":"{}","kind":"{kind}","method":"{method}"}}"#,
+            json_escape(specifier),
+            json_escape(resolved)
+        );
+        (format!("{resolved}::File::{resolved}"), props)
     }
 
     fn lookup_file(&self, path_no_ext: &str, language: &str) -> Option<String> {
@@ -373,6 +453,108 @@ fn json_escape(s: &str) -> String {
     s.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
+/// Load `compilerOptions.paths` (+ baseUrl) from tsconfig.json / jsconfig.json in the project.
+pub fn load_ts_path_aliases(
+    known_files: &[String],
+    contents: &HashMap<String, String>,
+) -> Vec<PathAlias> {
+    let mut aliases = Vec::new();
+    for name in ["tsconfig.json", "jsconfig.json"] {
+        // Prefer root config; also accept nested */tsconfig.json
+        let candidates: Vec<&String> = known_files
+            .iter()
+            .filter(|p| p.ends_with(name) || *p == name)
+            .collect();
+        for path in candidates {
+            let Some(raw) = contents.get(path.as_str()) else {
+                // Try path key variants
+                continue;
+            };
+            if let Some(mut found) = parse_tsconfig_paths(raw, path) {
+                aliases.append(&mut found);
+            }
+        }
+        // Also match content map keys that equal the basename at repo root
+        if let Some(raw) = contents.get(name) {
+            if let Some(mut found) = parse_tsconfig_paths(raw, name) {
+                aliases.append(&mut found);
+            }
+        }
+    }
+    aliases
+}
+
+fn parse_tsconfig_paths(raw: &str, config_path: &str) -> Option<Vec<PathAlias>> {
+    // Strip JSONC-ish comments lightly
+    let cleaned = strip_json_comments(raw);
+    let v: serde_json::Value = serde_json::from_str(&cleaned).ok()?;
+    let compiler = v.get("compilerOptions")?;
+    let base_url = compiler
+        .get("baseUrl")
+        .and_then(|b| b.as_str())
+        .unwrap_or(".");
+    let config_dir = parent_dir(config_path);
+    let base = if config_dir.is_empty() {
+        base_url.to_string()
+    } else if base_url == "." {
+        config_dir
+    } else {
+        normalize_path(&format!("{config_dir}/{base_url}"))
+    };
+    let paths = compiler.get("paths")?.as_object()?;
+    let mut out = Vec::new();
+    for (pattern, targets) in paths {
+        let prefix = pattern.trim_end_matches('*').to_string();
+        if prefix.is_empty() {
+            continue;
+        }
+        let mut target_list = Vec::new();
+        if let Some(arr) = targets.as_array() {
+            for t in arr {
+                if let Some(s) = t.as_str() {
+                    let t_prefix = s.trim_end_matches('*');
+                    let joined = if base.is_empty() {
+                        t_prefix.to_string()
+                    } else {
+                        normalize_path(&format!("{base}/{t_prefix}"))
+                    };
+                    target_list.push(joined);
+                }
+            }
+        }
+        if !target_list.is_empty() {
+            out.push(PathAlias {
+                prefix,
+                targets: target_list,
+            });
+        }
+    }
+    Some(out)
+}
+
+fn strip_json_comments(s: &str) -> String {
+    // Minimal: remove // line comments outside strings (good enough for tsconfig)
+    let mut out = String::with_capacity(s.len());
+    for line in s.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("//") {
+            continue;
+        }
+        if let Some(idx) = line.find("//") {
+            // keep if inside quotes naively
+            let before = &line[..idx];
+            if before.matches('"').count() % 2 == 0 {
+                out.push_str(before);
+                out.push('\n');
+                continue;
+            }
+        }
+        out.push_str(line);
+        out.push('\n');
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -425,6 +607,36 @@ mod tests {
         let edges = resolver.extract("src/lib.rs", "rust", src);
         assert!(
             edges.iter().any(|e| e.dst_qn.contains("src/util.rs::File::")),
+            "{edges:?}"
+        );
+    }
+
+    #[test]
+    fn resolves_tsconfig_path_alias() {
+        let mut contents = HashMap::new();
+        contents.insert(
+            "tsconfig.json".into(),
+            r#"{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": { "@/*": ["src/*"] }
+  }
+}"#
+            .into(),
+        );
+        contents.insert("src/main.ts".into(), "import x from '@/util/helper';\n".into());
+        contents.insert("src/util/helper.ts".into(), "export const x = 1;\n".into());
+        let files = vec![
+            "tsconfig.json".into(),
+            "src/main.ts".into(),
+            "src/util/helper.ts".into(),
+        ];
+        let resolver = ImportResolver::from_project_files(files, &contents);
+        let edges = resolver.extract("src/main.ts", "typescript", contents.get("src/main.ts").unwrap());
+        assert!(
+            edges
+                .iter()
+                .any(|e| e.dst_qn.contains("src/util/helper.ts::File::")),
             "{edges:?}"
         );
     }
