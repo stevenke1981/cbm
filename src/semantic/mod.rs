@@ -4,7 +4,10 @@ mod signals;
 
 pub use corpus::Corpus;
 pub use ri::{cosine_f32, cosine_i8, quantize, Vector};
-pub use signals::{ScoreBreakdown, SymbolProfile, RELATED_THRESHOLD, SIMILAR_THRESHOLD};
+pub use signals::{
+    related_threshold, similar_threshold, ScoreBreakdown, SignalWeights, SymbolProfile,
+    RELATED_THRESHOLD, SIMILAR_THRESHOLD,
+};
 
 use crate::discover::IndexMode;
 use crate::error::Result;
@@ -145,7 +148,7 @@ pub fn compute_semantic_edges(
                     idx_b: Some(j),
                 },
             );
-            if breakdown.combined >= RELATED_THRESHOLD {
+            if breakdown.combined >= related_threshold() {
                 pair_scores.push((i, j, breakdown));
             }
         }
@@ -164,7 +167,7 @@ pub fn compute_semantic_edges(
 
     for (i, j, breakdown) in pair_scores {
         let props = breakdown.to_json().to_string();
-        if breakdown.combined >= SIMILAR_THRESHOLD {
+        if breakdown.combined >= similar_threshold() {
             let ci = *similar_count.get(&i).unwrap_or(&0);
             let cj = *similar_count.get(&j).unwrap_or(&0);
             if ci >= MAX_SIMILAR_EDGES_PER_NODE || cj >= MAX_SIMILAR_EDGES_PER_NODE {

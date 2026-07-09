@@ -72,6 +72,9 @@ fn lang_bash() -> Language {
 fn lang_kotlin() -> Language {
     tree_sitter_kotlin_ng::LANGUAGE.into()
 }
+fn lang_swift() -> Language {
+    tree_sitter_swift::LANGUAGE.into()
+}
 
 const PROFILES: &[AstCallProfile] = &[
     AstCallProfile {
@@ -213,6 +216,17 @@ const PROFILES: &[AstCallProfile] = &[
 (call_expression
   (navigation_expression
     (identifier) @method))
+"#,
+    },
+    AstCallProfile {
+        language_id: "swift",
+        language_fn: lang_swift,
+        query_src: r#"
+(call_expression
+  (simple_identifier) @callee)
+(call_expression
+  (navigation_expression
+    (navigation_suffix (simple_identifier) @method)))
 "#,
     },
 ];

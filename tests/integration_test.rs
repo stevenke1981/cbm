@@ -677,6 +677,38 @@ fn emits_http_calls_linking_client_to_route() {
 }
 
 #[test]
+fn indexes_swift_functions() {
+    let (_guard, _cache, _) = isolated_cache();
+    let dir = TempDir::new().unwrap();
+    fs::write(
+        dir.path().join("Greeter.swift"),
+        r#"
+class Greeter {
+  func hello() {
+    world()
+  }
+  func world() {}
+}
+"#,
+    )
+    .unwrap();
+
+    let pipeline = Pipeline::new(IndexMode::Full);
+    let index = pipeline.run(dir.path(), Some("swift-graph")).unwrap();
+    let store = Store::open(&index.project).unwrap();
+    let symbols = store.list_symbols().unwrap();
+    assert!(
+        symbols
+            .iter()
+            .any(|s| s.name == "hello" && s.file_path.ends_with(".swift")),
+        "swift function missing: {symbols:?}"
+    );
+    assert!(store.count_edges_by_type("CALLS").unwrap() >= 1);
+
+    let _ = cbm::store::delete_project_db(&index.project);
+}
+
+#[test]
 fn indexes_kotlin_calls_and_inherits() {
     let (_guard, _cache, _) = isolated_cache();
     let dir = TempDir::new().unwrap();

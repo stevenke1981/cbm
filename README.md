@@ -14,13 +14,15 @@ Parity status: [`PARITY_MATRIX.md`](PARITY_MATRIX.md)
 
 | Area | Current state |
 |------|---------------|
-| Rust MVP rewrite | Complete through Sections 3-7 |
-| MCP stdio server | Usable |
+| Rust MVP rewrite | Complete through Sections 3-7; ongoing parity hardening |
+| MCP stdio server | Usable; `index_repository background=true` for non-blocking index |
 | CLI tool dispatch | Usable with `--json --quiet` |
-| Agent install hooks | OpenCode, Codex, Claude-style configs |
-| MCP handoff package | `packaging/mcp/` templates and manifest |
-| Graph store | SQLite + optional `.codebase-memory/graph.db.zst` export |
-| Semantic edges | Optional via `CBM_SEMANTIC_ENABLED=1` |
+| Agent install hooks | OpenCode, Codex, Claude-style configs (multi-agent install) |
+| Languages (tree-sitter) | 14 families: Rust, Python, JS/TS, Go, Java, C/C++, Ruby, C#, PHP, Bash, Kotlin, Swift |
+| Graph edges | `CONTAINS`, `IMPORTS`, `CALLS`, `INHERITS`, `IMPLEMENTS`, `DECORATES`, `HTTP_ROUTE`, `HTTP_CALLS`, semantic, traces |
+| Graph store | SQLite + FTS5 `search_code` + optional `.codebase-memory/graph.db.zst` |
+| Communities | Louvain modularity (default); `CBM_COMMUNITY_ALGO=components` fallback |
+| Semantic edges | Optional via `CBM_SEMANTIC_ENABLED=1`; tunable weights/thresholds |
 | Full reference parity | Not complete; see `PARITY_MATRIX.md` backlog |
 
 ## For Humans
@@ -68,15 +70,24 @@ cargo build --release
 
 Project names are stored with a `cbm+` prefix. For example, `cbm-review` becomes `cbm+cbm-review`.
 
+Background index (returns immediately; poll status):
+
+```powershell
+.\target\release\cbm.exe cli index_repository --json --quiet '{"repo_path":".","project":"cbm-review","background":true}'
+.\target\release\cbm.exe cli index_status --json --quiet '{"project":"cbm-review"}'
+# or poll by job_id from the start response
+```
+
 ### Search The Graph
 
 ```powershell
 .\target\release\cbm.exe cli search_graph --json --quiet '{"project":"cbm-review","query":"handler","limit":10}'
 .\target\release\cbm.exe cli search_graph --json --quiet '{"project":"cbm-review","relationship":"CALLS","label":"Function"}'
 .\target\release\cbm.exe cli trace_path --json --quiet '{"project":"cbm-review","function_name":"run_cli","direction":"both","depth":2}'
+.\target\release\cbm.exe cli search_code --json --quiet '{"project":"cbm-review","pattern":"IndexSupervisor","limit":10}'
 ```
 
-`name_pattern` and `qn_pattern` use regex. `file_pattern` uses glob. Paginated responses include `has_more`.
+`name_pattern` and `qn_pattern` use regex. `file_pattern` uses glob. Paginated responses include `has_more`. `search_code` uses SQLite FTS5 when available.
 
 ### Run MCP Server
 
@@ -241,26 +252,33 @@ cbm cli index_repository --json --quiet '{"repo_path":".","project":"x","mode":"
 |----------|---------|
 | `CBM_CACHE_DIR` | Override SQLite/cache location |
 | `CBM_SEMANTIC_ENABLED=1` | Enable semantic vector pass and semantic edges |
+| `CBM_SEMANTIC_WEIGHTS` | JSON object of signal weights (auto-normalized), e.g. `{"tfidf":0.2,"ri":0.15}` |
+| `CBM_SIMILAR_THRESHOLD` | `SIMILAR_TO` min score (default `0.55`) |
+| `CBM_RELATED_THRESHOLD` | `SEMANTICALLY_RELATED` min score (default `0.35`) |
+| `CBM_COMMUNITY_ALGO` | `louvain` (default) or `components` |
+| `CBM_COMMUNITY_RESOLUTION` | Louvain resolution (default `1.0`) |
 | `CBM_PERSISTENCE=1` | Export/import `.codebase-memory/graph.db.zst` |
 | `CBM_WATCHER=0` | Disable background reindex watcher |
 | `CBM_UI=1` | Enable HTTP graph UI |
 | `CBM_PORT` | HTTP UI port, default `9749` |
 | `CBM_PROFILE=1` | Log per-phase index timings |
 | `CBM_MEMORY_BUDGET_MB` | Max memory budget for file indexing, default `512` |
+| `CBM_STORE_IDLE_SECS` | StorePool idle eviction (default `300`) |
+| `CBM_SQLITE_MMAP_SIZE` | Override SQLite mmap size in bytes |
 
 ## MCP Tools
 
 | Tool | Purpose |
 |------|---------|
-| `index_repository` | Build or refresh a project graph |
-| `index_status` | Check indexed state |
+| `index_repository` | Build/refresh graph; optional `background`/`async` for non-blocking job |
+| `index_status` | Indexed state; poll `job_id` or `project` for background jobs |
 | `search_graph` / `rlm_filter` | Search symbols with regex, glob, relationship, degree, pagination |
 | `trace_path` | Trace call paths inbound/outbound/both |
 | `get_code_snippet` / `rlm_read_symbol` | Read source for one symbol |
 | `query_graph` | Read-only `SELECT` queries |
 | `get_graph_schema` | Labels, edge types, schema summary |
 | `get_architecture` | Counts, top symbols, communities |
-| `search_code` | Literal code search inside indexed files |
+| `search_code` | FTS5 code search inside indexed files |
 | `rlm_scan` / `rlm_chunk` / `rlm_peek` | Chunk large non-code blobs/logs for RLM workflows |
 | `detect_changes` | Git-aware change summary |
 | `manage_adr` | Store architecture decision notes |
@@ -270,18 +288,24 @@ cbm cli index_repository --json --quiet '{"repo_path":".","project":"x","mode":"
 
 - Qualified name format: `{file}::{label}::{name}@L{line}`
 - Structure nodes: `Project`, `Folder`, `File`
-- Core edges: `CONTAINS`, `IMPORTS`, `CALLS`, `INHERITS`, `IMPLEMENTS`, `DECORATES`, `HTTP_ROUTE`
+- Core edges: `CONTAINS`, `IMPORTS`, `CALLS`, `INHERITS`, `IMPLEMENTS`, `DECORATES`, `HTTP_ROUTE`, `HTTP_CALLS`
 - Optional edges: `SIMILAR_TO`, `SEMANTICALLY_RELATED`, `RUNTIME_TRACE`
-- Not emitted yet: `HTTP_CALLS`
+- Communities: Louvain on CALLS/IMPORTS/INHERITS/IMPLEMENTS (per-symbol `community_id` + `community_algo`)
+
+## Languages
+
+Tree-sitter (extract + CALLS AST where applicable): **Rust, Python, JavaScript/TypeScript, Go, Java, C/C++, Ruby, C#, PHP, Bash, Kotlin, Swift**.
+
+Relative import path resolution for JS/TS/Python/Rust modules; regex fallbacks for other languages.
 
 ## Project Layout
 
 ```text
 src/
-  pipeline/     Index passes: discover, extract, structure, imports, calls, routes
-  store/        SQLite graph store, search, schema, query helpers
-  mcp/          JSON-RPC MCP server and tool dispatch
-  semantic/     Multi-signal similarity and vector scoring
+  pipeline/     Index passes: structure, imports, calls, routes, inheritance, semantic, communities
+  store/        SQLite graph store, FTS5, search, schema, StorePool
+  mcp/          JSON-RPC MCP server, tools, IndexSupervisor
+  semantic/     11-signal similarity, tunable weights, vectors
   rlm/          RLM scan/chunk/session workflow and persistence
   http/         Optional graph UI
   install/      Agent config installation and uninstall
@@ -292,11 +316,11 @@ packaging/      Deferred package manager metadata and installers
 
 ## Next Work
 
-The main project contract is now: keep the Rust MVP stable while closing full-parity gaps deliberately.
-
-Start with:
+Keep the Rust MVP stable while closing full-parity gaps deliberately.
 
 1. [`PARITY_MATRIX.md`](PARITY_MATRIX.md) for current claims and blockers.
+2. Hybrid LSP / more languages (beyond the current 14 families).
+3. Packaging channels (npm/scoop/winget) when ready — see `packaging/DEFERRED_CHANNELS.md`.
 2. [`RUST_REWRITE_TODO.md`](RUST_REWRITE_TODO.md) for historical implementation slices.
 3. `tests/calls_pipeline_test.rs` and `tests/cli_process_test.rs` before changing graph precision or CLI behavior.
 

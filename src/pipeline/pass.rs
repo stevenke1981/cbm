@@ -340,6 +340,8 @@ impl IndexPass for CommunitiesPass {
             "community_count",
             &community_result.community_count.to_string(),
         )?;
+        ctx.store
+            .set_meta("community_algo", community_result.algorithm)?;
 
         // Compact samples for get_architecture (avoids full symbol table scan).
         let mut by_id: HashMap<u32, Vec<String>> = HashMap::new();

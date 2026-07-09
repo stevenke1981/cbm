@@ -210,6 +210,10 @@ fn collect_import_specs(language: &str, content: &str) -> Vec<(String, String)> 
             (r"(?m)^\s*import\s+([\w.]+)", "import"),
             (r"(?m)^\s*package\s+([\w.]+)", "package"),
         ],
+        "swift" => &[
+            (r"(?m)^\s*import\s+(\w+)", "import"),
+            (r#"(?m)^\s*import\s+class\s+(\w+)"#, "import"),
+        ],
         "csharp" => &[(r"(?m)^\s*using\s+([\w.]+)\s*;", "using")],
         "ruby" => &[
             (r#"(?m)^\s*require\s+['"]([^'"]+)['"]"#, "require"),

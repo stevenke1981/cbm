@@ -10,8 +10,141 @@ use std::collections::{HashMap, HashSet};
 pub const MINHASH_BUCKETS: usize = 64;
 pub const SHINGLE_SIZE: usize = 3;
 
-pub const SIMILAR_THRESHOLD: f32 = 0.58;
-pub const RELATED_THRESHOLD: f32 = 0.38;
+/// Default SIMILAR_TO threshold (overridable via `CBM_SIMILAR_THRESHOLD`).
+pub const SIMILAR_THRESHOLD: f32 = 0.55;
+/// Default SEMANTICALLY_RELATED threshold (overridable via `CBM_RELATED_THRESHOLD`).
+pub const RELATED_THRESHOLD: f32 = 0.35;
+
+/// Tunable multi-signal weights (sum normalized to 1.0 at load).
+///
+/// Env:
+/// - `CBM_SEMANTIC_WEIGHTS` JSON object of signal → weight
+/// - `CBM_SIMILAR_THRESHOLD` / `CBM_RELATED_THRESHOLD` floats
+#[derive(Debug, Clone, Serialize)]
+pub struct SignalWeights {
+    pub tfidf: f32,
+    pub ri: f32,
+    pub minhash: f32,
+    pub api_signature: f32,
+    pub module_proximity: f32,
+    pub halstead: f32,
+    pub type_signature: f32,
+    pub decorator_pattern: f32,
+    pub ast_profile: f32,
+    pub data_flow: f32,
+    pub graph_diffusion: f32,
+}
+
+impl Default for SignalWeights {
+    fn default() -> Self {
+        // Tuned defaults: more weight on structure/API/types than pure bag-of-words.
+        Self {
+            tfidf: 0.16,
+            ri: 0.14,
+            minhash: 0.12,
+            api_signature: 0.10,
+            module_proximity: 0.08,
+            type_signature: 0.10,
+            ast_profile: 0.09,
+            data_flow: 0.08,
+            decorator_pattern: 0.05,
+            graph_diffusion: 0.05,
+            halstead: 0.03,
+        }
+    }
+}
+
+impl SignalWeights {
+    pub fn load() -> Self {
+        let mut w = Self::default();
+        if let Ok(raw) = std::env::var("CBM_SEMANTIC_WEIGHTS") {
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) {
+                if let Some(obj) = v.as_object() {
+                    macro_rules! take {
+                        ($field:ident) => {
+                            if let Some(n) = obj.get(stringify!($field)).and_then(|x| x.as_f64()) {
+                                w.$field = n as f32;
+                            }
+                        };
+                    }
+                    take!(tfidf);
+                    take!(ri);
+                    take!(minhash);
+                    take!(api_signature);
+                    take!(module_proximity);
+                    take!(halstead);
+                    take!(type_signature);
+                    take!(decorator_pattern);
+                    take!(ast_profile);
+                    take!(data_flow);
+                    take!(graph_diffusion);
+                }
+            }
+        }
+        w.normalize()
+    }
+
+    pub fn normalize(mut self) -> Self {
+        let sum = self.tfidf
+            + self.ri
+            + self.minhash
+            + self.api_signature
+            + self.module_proximity
+            + self.halstead
+            + self.type_signature
+            + self.decorator_pattern
+            + self.ast_profile
+            + self.data_flow
+            + self.graph_diffusion;
+        if sum > 0.0 {
+            self.tfidf /= sum;
+            self.ri /= sum;
+            self.minhash /= sum;
+            self.api_signature /= sum;
+            self.module_proximity /= sum;
+            self.halstead /= sum;
+            self.type_signature /= sum;
+            self.decorator_pattern /= sum;
+            self.ast_profile /= sum;
+            self.data_flow /= sum;
+            self.graph_diffusion /= sum;
+        }
+        self
+    }
+
+    pub fn combined(&self, parts: &ScoreBreakdown) -> f32 {
+        self.tfidf * parts.tfidf
+            + self.ri * parts.ri
+            + self.minhash * parts.minhash
+            + self.api_signature * parts.api_signature
+            + self.module_proximity * parts.module_proximity
+            + self.halstead * parts.halstead
+            + self.type_signature * parts.type_signature
+            + self.decorator_pattern * parts.decorator_pattern
+            + self.ast_profile * parts.ast_profile
+            + self.data_flow * parts.data_flow
+            + self.graph_diffusion * parts.graph_diffusion
+    }
+}
+
+pub fn similar_threshold() -> f32 {
+    env_f32("CBM_SIMILAR_THRESHOLD").unwrap_or(SIMILAR_THRESHOLD)
+}
+
+pub fn related_threshold() -> f32 {
+    env_f32("CBM_RELATED_THRESHOLD").unwrap_or(RELATED_THRESHOLD)
+}
+
+fn env_f32(key: &str) -> Option<f32> {
+    std::env::var(key).ok().and_then(|v| v.parse().ok())
+}
+
+fn weights() -> SignalWeights {
+    use std::sync::OnceLock;
+    static W: OnceLock<SignalWeights> = OnceLock::new();
+    // Note: OnceLock freezes first load; tests that set env should call before first score.
+    W.get_or_init(SignalWeights::load).clone()
+}
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ScoreBreakdown {
@@ -31,8 +164,14 @@ pub struct ScoreBreakdown {
 
 impl ScoreBreakdown {
     pub fn to_json(&self) -> serde_json::Value {
+        let w = weights();
         serde_json::json!({
             "score": self.combined,
+            "thresholds": {
+                "similar": similar_threshold(),
+                "related": related_threshold(),
+            },
+            "weights": w,
             "signals": {
                 "tfidf": self.tfidf,
                 "ri": self.ri,
@@ -200,7 +339,7 @@ pub fn score_pair_with_diffusion(
         }
         _ => 0.0,
     };
-    let combined = combined_score(ScoreBreakdown {
+    let parts = ScoreBreakdown {
         tfidf,
         ri,
         minhash,
@@ -213,35 +352,13 @@ pub fn score_pair_with_diffusion(
         data_flow,
         graph_diffusion,
         combined: 0.0,
-    });
-    ScoreBreakdown {
-        tfidf,
-        ri,
-        minhash,
-        api_signature,
-        module_proximity,
-        halstead,
-        type_signature,
-        decorator_pattern,
-        ast_profile,
-        data_flow,
-        graph_diffusion,
-        combined,
-    }
+    };
+    let combined = combined_score(parts.clone());
+    ScoreBreakdown { combined, ..parts }
 }
 
 pub fn combined_score(parts: ScoreBreakdown) -> f32 {
-    0.18 * parts.tfidf
-        + 0.15 * parts.ri
-        + 0.10 * parts.minhash
-        + 0.08 * parts.api_signature
-        + 0.07 * parts.module_proximity
-        + 0.06 * parts.halstead
-        + 0.10 * parts.type_signature
-        + 0.06 * parts.decorator_pattern
-        + 0.08 * parts.ast_profile
-        + 0.07 * parts.data_flow
-        + 0.05 * parts.graph_diffusion
+    weights().combined(&parts)
 }
 
 fn shingles(tokens: &[String], k: usize) -> Vec<String> {

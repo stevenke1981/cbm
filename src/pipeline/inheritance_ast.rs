@@ -57,6 +57,9 @@ fn lang_ruby() -> Language {
 fn lang_kotlin() -> Language {
     tree_sitter_kotlin_ng::LANGUAGE.into()
 }
+fn lang_swift() -> Language {
+    tree_sitter_swift::LANGUAGE.into()
+}
 
 const PROFILES: &[InheritanceProfile] = &[
     InheritanceProfile {
@@ -213,6 +216,24 @@ const PROFILES: &[InheritanceProfile] = &[
   (delegation_specifiers
     (delegation_specifier
       (user_type (identifier) @iface))))
+"#,
+    },
+    InheritanceProfile {
+        language_id: "swift",
+        language_fn: lang_swift,
+        query_src: r#"
+(class_declaration
+  name: (type_identifier) @child
+  (inheritance_specifier
+    (user_type (type_identifier) @parent)))
+(class_declaration
+  name: (type_identifier) @child
+  (inheritance_specifier
+    (user_type (type_identifier) @iface)))
+(struct_declaration
+  name: (type_identifier) @child
+  (inheritance_specifier
+    (user_type (type_identifier) @iface)))
 "#,
     },
 ];

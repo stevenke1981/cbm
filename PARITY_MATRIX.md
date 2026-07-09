@@ -36,7 +36,7 @@ Last updated: 2026-07-10 (INHERITS/IMPLEMENTS AST + cross-file resolve).
 | Graceful shutdown / cancel | Yes | Ctrl+C stops watcher/HTTP | MVP |
 | Background index jobs | Yes (supervised) | `index_repository background=true` + `IndexSupervisor` | Done |
 | Hybrid LSP type resolution | 9 language families | — | Not started |
-| Tree-sitter languages | 158 | 13 (Rust, Py, JS/TS, Go, Java, C, C++, Ruby, C#, PHP, Bash, Kotlin) | Partial |
+| Tree-sitter languages | 158 | 14 (Rust, Py, JS/TS, Go, Java, C, C++, Ruby, C#, PHP, Bash, Kotlin, Swift) | Partial |
 | FoundationDB backend | No (SQLite) | — | Omitted (SQLite only) |
 
 ## Indexing pipeline (heuristic passes marked)
@@ -57,7 +57,7 @@ Last updated: 2026-07-10 (INHERITS/IMPLEMENTS AST + cross-file resolve).
 | HTTP route pass | Yes | `HTTP_ROUTE` multi-framework patterns | Partial |
 | HTTP client→route | Yes | `HTTP_CALLS` path matching | MVP |
 | Git history / cross-repo | Yes | Git HEAD + dirty detection only | Partial |
-| Community detection | Yes | Connected-components on CALLS+IMPORTS | MVP (not Leiden/Louvain) |
+| Community detection | Yes | Louvain modularity (default); components fallback | Done (Louvain) |
 | Post-processing summaries | Yes | `get_architecture` + communities | Partial |
 
 ## Edge types emitted
@@ -135,26 +135,28 @@ These are **not done** and should not be inferred from MVP completion:
 
 | Item | Priority | Notes |
 |------|----------|-------|
-| Leiden / Louvain communities | P2 | Replace connected-components MVP |
+| Leiden / Louvain communities | — | **Done** Louvain single-level; Leiden multi-level not required |
 | `HTTP_CALLS` pass | — | **Done** (path-match MVP; framework coverage limited) |
 | Import path resolution | — | **Done** for relative JS/Py/Rust mod; absolute packages still external |
 | `search_code` FTS5 | — | **Done** |
 | Multi-language AST-aware CALLS | — | **Done** for 12 language families |
 | Store bulk transaction API | — | **Done** (`bulk_index`, `replace_edges_of_type`) |
 | INHERITS / IMPLEMENTS AST | — | **Done** for Py/JS/TS/Java/Rust/Go/C++/Ruby/Kotlin |
-| Kotlin grammar | — | **Done** (`tree-sitter-kotlin-ng`: extract/CALLS/inherits) |
-| Tree-sitter coverage gaps | P2 | Swift, … (beyond current 13) |
+| Kotlin grammar | — | **Done** (`tree-sitter-kotlin-ng`) |
+| Swift grammar | — | **Done** (`tree-sitter-swift`) |
+| Semantic weight tuning | — | **Done** (`SignalWeights` + env thresholds) |
+| Tree-sitter coverage gaps | P2 | … beyond current 14 families |
 | FoundationDB backend | — | Omitted; SQLite is canonical |
 | Wrapper packaging (Go/PyPI/npm/Chocolatey/AUR) | P3 | See `packaging/DEFERRED_CHANNELS.md` |
 | Full reference UI (React graph-ui) | P3 | Lightweight HTML is deliberate MVP |
-| Reference-grade semantic tuning | P2 | 11 signals present; weights differ |
+| Reference-grade semantic tuning | — | **Partial→Done**: tunable weights; defaults rebalanced for structure/API |
 
 ## Full parity blockers
 
 A new agent should treat these as blockers before claiming equivalence with the reference C implementation:
 
 1. Regex/heuristic remains for imports (absolute packages), decorators, and languages without AST profiles.
-2. Community detection is connected-components, not modularity optimization.
+2. Community detection is Louvain single-level (not full Leiden multi-resolution).
 3. HTTP routes/calls are pattern/path limited (no OpenAPI/template expansion).
 4. No Hybrid LSP type resolution (C reference has 9 language families).
 5. FoundationDB and reference C foundation layer omitted by design.

@@ -331,6 +331,29 @@ fn extract_inheritance_regex(
                 |cap| Some((cap.get(1)?.as_str(), cap.get(2)?.as_str())),
             );
         }
+        "swift" => {
+            // class Child: Parent, Protocol
+            if let Ok(re) = Regex::new(
+                r"(?m)^\s*(?:public\s+|private\s+|open\s+|final\s+)*(?:class|struct)\s+(\w+)\s*:\s*([^{\n]+)",
+            ) {
+                for cap in re.captures_iter(content) {
+                    let Some(child) = cap.get(1) else { continue };
+                    let Some(bases) = cap.get(2) else { continue };
+                    let Some(src) = local.get(child.as_str()) else {
+                        continue;
+                    };
+                    for (i, base) in bases.as_str().split(',').enumerate() {
+                        let base = base.trim();
+                        if base.is_empty() {
+                            continue;
+                        }
+                        let edge_type = if i == 0 { "INHERITS" } else { "IMPLEMENTS" };
+                        let dst = resolve_target_name(base, local, project, file_path);
+                        push_edge(edge_type, src, &dst, "regex", &mut edges, &mut seen);
+                    }
+                }
+            }
+        }
         "cpp" | "c" => {
             extract_pairs(
                 &mut ctx,

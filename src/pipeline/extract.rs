@@ -83,6 +83,7 @@ fn language_for_ts(language: &str) -> Option<Language> {
         "php" => tree_sitter_php::LANGUAGE_PHP.into(),
         "shell" | "bash" => tree_sitter_bash::LANGUAGE.into(),
         "kotlin" => tree_sitter_kotlin_ng::LANGUAGE.into(),
+        "swift" => tree_sitter_swift::LANGUAGE.into(),
         _ => return None,
     })
 }
@@ -183,6 +184,15 @@ fn query_for_language(language: &str) -> (&'static str, &'static str) {
             "#,
             "Function",
         ),
+        "swift" => (
+            r#"
+            (function_declaration name: (simple_identifier) @name) @definition
+            (class_declaration name: (type_identifier) @name) @definition
+            (protocol_declaration name: (type_identifier) @name) @definition
+            (struct_declaration name: (type_identifier) @name) @definition
+            "#,
+            "Function",
+        ),
         _ => (r#"(identifier) @name"#, "Function"),
     }
 }
@@ -234,6 +244,8 @@ fn label_for_kind(kind: &str) -> Option<&'static str> {
         | "trait_item"
         | "impl_item"
         | "interface_declaration"
+        | "protocol_declaration"
+        | "struct_declaration"
         | "module"
         | "class" => "Class",
         _ => return None,
@@ -297,6 +309,12 @@ fn extract_symbols_regex(file_path: &str, language: &str, content: &str) -> Vec<
             (r"(?m)^\s*(?:private\s+|public\s+|internal\s+|open\s+|data\s+|sealed\s+)*class\s+(\w+)", "Class"),
             (r"(?m)^\s*(?:private\s+|public\s+|internal\s+)*object\s+(\w+)", "Class"),
             (r"(?m)^\s*(?:private\s+|public\s+|internal\s+)*interface\s+(\w+)", "Class"),
+        ],
+        "swift" => &[
+            (r"(?m)^\s*(?:public\s+|private\s+|internal\s+|fileprivate\s+|open\s+|static\s+|override\s+)*func\s+(\w+)", "Function"),
+            (r"(?m)^\s*(?:public\s+|private\s+|internal\s+|open\s+|final\s+)*class\s+(\w+)", "Class"),
+            (r"(?m)^\s*(?:public\s+|private\s+|internal\s+)*struct\s+(\w+)", "Class"),
+            (r"(?m)^\s*(?:public\s+|private\s+|internal\s+)*protocol\s+(\w+)", "Class"),
         ],
         _ => &[(r"(?m)^\s*(?:fn|def|func)\s+(\w+)", "Function")],
     };
@@ -371,6 +389,28 @@ class Greeter {
         assert!(
             syms.iter().any(|s| s.name == "Greeter" && s.label == "Class"),
             "expected Greeter class: {syms:?}"
+        );
+    }
+
+    #[test]
+    fn extracts_swift_functions_and_classes() {
+        let src = r#"
+class Greeter {
+  func hello() {
+    world()
+  }
+  func world() {}
+}
+"#;
+        let syms = extract_symbols("Main.swift", "swift", src).unwrap();
+        assert!(
+            syms.iter()
+                .any(|s| s.name == "hello" && s.label == "Function"),
+            "expected hello: {syms:?}"
+        );
+        assert!(
+            syms.iter().any(|s| s.name == "Greeter" && s.label == "Class"),
+            "expected Greeter: {syms:?}"
         );
     }
 }
