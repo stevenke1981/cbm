@@ -422,9 +422,7 @@ mod tests {
         let src = "def helper():\n    pass\n\ndef main():\n    helper()\n";
         let reg = FunctionRegistry::from_symbols(&symbols);
         let r = AstCallResolver::for_language("python").unwrap();
-        let edges = r
-            .try_resolve(&symbols, src, &reg, &HashSet::new())
-            .unwrap();
+        let edges = r.try_resolve(&symbols, src, &reg, &HashSet::new()).unwrap();
         assert!(edges.iter().any(|e| e.dst_qn.contains("helper")));
         assert!(edges[0]
             .properties_json
@@ -441,9 +439,7 @@ mod tests {
         let src = "function helper() {}\nfunction main() { helper(); }\n";
         let reg = FunctionRegistry::from_symbols(&symbols);
         let r = AstCallResolver::for_language("javascript").unwrap();
-        let edges = r
-            .try_resolve(&symbols, src, &reg, &HashSet::new())
-            .unwrap();
+        let edges = r.try_resolve(&symbols, src, &reg, &HashSet::new()).unwrap();
         assert_eq!(edges.len(), 1);
     }
 
@@ -456,9 +452,7 @@ mod tests {
         let src = "package main\nfunc helper() {}\nfunc main() { helper() }\n";
         let reg = FunctionRegistry::from_symbols(&symbols);
         let r = AstCallResolver::for_language("go").unwrap();
-        let edges = r
-            .try_resolve(&symbols, src, &reg, &HashSet::new())
-            .unwrap();
+        let edges = r.try_resolve(&symbols, src, &reg, &HashSet::new()).unwrap();
         assert_eq!(edges.len(), 1);
     }
 }

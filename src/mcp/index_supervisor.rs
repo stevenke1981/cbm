@@ -162,8 +162,7 @@ impl IndexSupervisor {
                     .unwrap_or_else(|| Arc::new(AtomicBool::new(false)));
                 let _pg = PipelineBusyGuard::new(busy_flag);
 
-                let pipeline =
-                    Pipeline::new(mode_worker).set_export_artifact(persistence);
+                let pipeline = Pipeline::new(mode_worker).set_export_artifact(persistence);
                 let run = if incremental {
                     pipeline.run_smart(&abs_worker, Some(&project_worker), true)
                 } else {
@@ -293,7 +292,9 @@ fn prune_finished(jobs: &mut HashMap<String, IndexJob>, keep: usize) {
         .map(|(id, j)| {
             (
                 id.clone(),
-                j.snapshot.finished_unix_ms.unwrap_or(j.snapshot.started_unix_ms),
+                j.snapshot
+                    .finished_unix_ms
+                    .unwrap_or(j.snapshot.started_unix_ms),
             )
         })
         .collect();

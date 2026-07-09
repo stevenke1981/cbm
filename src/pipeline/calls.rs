@@ -154,13 +154,7 @@ pub fn resolve_calls_with_function_registry(
     registry: &FunctionRegistry,
     import_files: &HashSet<String>,
 ) -> Vec<Edge> {
-    CallResolutionPipeline::default().resolve(
-        symbols,
-        content,
-        language,
-        registry,
-        import_files,
-    )
+    CallResolutionPipeline::default().resolve(symbols, content, language, registry, import_files)
 }
 
 /// Resolve CALLS edges from symbol definitions using name matching within file scope.
@@ -202,20 +196,14 @@ fn resolve_calls_inner(
                     if callee_name == sym.name || is_noise_callee(callee_name) {
                         continue;
                     }
-                    let resolutions =
-                        registry.resolve(callee_name, &sym.file_path, import_files);
+                    let resolutions = registry.resolve(callee_name, &sym.file_path, import_files);
                     for res in resolutions {
                         if res.qualified_name == sym.qualified_name {
                             continue;
                         }
                         let key = (sym.qualified_name.clone(), res.qualified_name.clone());
                         if seen.insert(key.clone()) {
-                            edges.push(make_call_edge(
-                                &key.0,
-                                &key.1,
-                                method,
-                                res.strategy,
-                            ));
+                            edges.push(make_call_edge(&key.0, &key.1, method, res.strategy));
                         }
                     }
                 }
@@ -391,13 +379,8 @@ mod tests {
         let mut imports = HashSet::new();
         imports.insert("src/util.js".into());
         let src = "function main() { helper(); }\n";
-        let edges = resolve_calls_with_function_registry(
-            &symbols[..1],
-            src,
-            "javascript",
-            &reg,
-            &imports,
-        );
+        let edges =
+            resolve_calls_with_function_registry(&symbols[..1], src, "javascript", &reg, &imports);
         assert_eq!(edges.len(), 1, "{edges:?}");
         assert!(edges[0].dst_qn.contains("util.js"));
         assert!(edges[0]

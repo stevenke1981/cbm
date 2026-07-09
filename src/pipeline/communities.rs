@@ -229,10 +229,8 @@ fn detect_louvain(symbols: &[Symbol], edges: &[Edge]) -> CommunityResult {
                 };
                 let sigma = sigma_tot[c];
                 // ΔQ for inserting i into community c (Blondel et al. 2008)
-                let delta = (ki_in / (2.0 * m))
-                    - resolution * (sigma * ki) / (4.0 * m * m);
-                if delta > best_delta + 1e-12 || ((delta - best_delta).abs() <= 1e-12 && c < best)
-                {
+                let delta = (ki_in / (2.0 * m)) - resolution * (sigma * ki) / (4.0 * m * m);
+                if delta > best_delta + 1e-12 || ((delta - best_delta).abs() <= 1e-12 && c < best) {
                     best_delta = delta;
                     best = c;
                 }
@@ -275,10 +273,7 @@ pub fn apply_community_properties(symbols: &mut [Symbol], result: &CommunityResu
             .unwrap_or_else(|| serde_json::json!({}));
         if let Some(obj) = props.as_object_mut() {
             obj.insert("community_id".into(), serde_json::json!(id));
-            obj.insert(
-                "community_algo".into(),
-                serde_json::json!(result.algorithm),
-            );
+            obj.insert("community_algo".into(), serde_json::json!(result.algorithm));
         }
         sym.properties_json = Some(props.to_string());
     }

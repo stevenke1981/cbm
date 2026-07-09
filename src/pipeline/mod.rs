@@ -15,7 +15,6 @@ pub use calls_ast::{AstCallProfile, AstCallResolver};
 pub use communities::*;
 pub use extract::*;
 pub use imports::{extract_import_edges, ImportResolver};
-pub use registry::{FunctionRegistry, Resolution, ResolveStrategy};
 pub use inheritance::{
     build_file_name_index, build_project_name_index, extract_inheritance_edges,
     extract_inheritance_edges_with_project, InheritancePipeline, InheritanceResolver,
@@ -25,9 +24,8 @@ pub use pass::{
     default_passes, run_passes, CallsPass, CommunitiesPass, ImportsPass, IndexPass,
     InheritancePass, PassContext, PassOutcome, RoutesPass, SemanticPass, StructurePass,
 };
-pub use routes::{
-    extract_http_client_calls, extract_http_routes, link_http_calls, HttpClientCall,
-};
+pub use registry::{FunctionRegistry, Resolution, ResolveStrategy};
+pub use routes::{extract_http_client_calls, extract_http_routes, link_http_calls, HttpClientCall};
 pub use structure::*;
 
 use crate::discover::{discover, language_for_path, DiscoveredFile, IndexMode};
@@ -391,7 +389,10 @@ fn finalize_index(
     Ok((ctx.edge_count, ctx.semantic))
 }
 
-pub(crate) fn rebuild_call_edges(store: &Store, code_symbols: &[Symbol]) -> Result<Vec<crate::store::Edge>> {
+pub(crate) fn rebuild_call_edges(
+    store: &Store,
+    code_symbols: &[Symbol],
+) -> Result<Vec<crate::store::Edge>> {
     use registry::{parse_import_files, FunctionRegistry};
     use std::collections::HashSet;
 

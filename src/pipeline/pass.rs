@@ -117,7 +117,12 @@ impl IndexPass for StructurePass {
     }
 
     fn run(&self, ctx: &mut PassContext<'_>) -> Result<PassOutcome> {
-        let file_paths: Vec<String> = ctx.store.list_files()?.into_iter().map(|f| f.path).collect();
+        let file_paths: Vec<String> = ctx
+            .store
+            .list_files()?
+            .into_iter()
+            .map(|f| f.path)
+            .collect();
         let symbol_qns: Vec<String> = ctx
             .code_symbols
             .iter()
@@ -133,8 +138,7 @@ impl IndexPass for StructurePass {
             &symbol_qns,
         );
         ctx.store.upsert_symbols_batch(&struct_symbols)?;
-        ctx.store
-            .replace_edges_of_type("CONTAINS", &struct_edges)?;
+        ctx.store.replace_edges_of_type("CONTAINS", &struct_edges)?;
         ctx.edge_count += struct_edges.len();
         Ok(PassOutcome {
             symbols_written: struct_symbols.len(),
@@ -163,8 +167,7 @@ impl IndexPass for ImportsPass {
         for file in &files {
             import_edges.extend(resolver.extract(&file.path, &file.language, &file.content));
         }
-        ctx.store
-            .replace_edges_of_type("IMPORTS", &import_edges)?;
+        ctx.store.replace_edges_of_type("IMPORTS", &import_edges)?;
         ctx.edge_count += import_edges.len();
         Ok(PassOutcome {
             edges_written: import_edges.len(),
@@ -263,10 +266,7 @@ impl IndexPass for InheritancePass {
         let mut inheritance_edges = Vec::new();
         let mut ast_count = 0usize;
         for file in ctx.store.list_files()? {
-            let file_syms = by_file
-                .get(&file.path)
-                .map(|s| s.as_slice())
-                .unwrap_or(&[]);
+            let file_syms = by_file.get(&file.path).map(|s| s.as_slice()).unwrap_or(&[]);
             let before = inheritance_edges.len();
             inheritance_edges.extend(extract_inheritance_edges_with_project(
                 &file.path,
@@ -285,10 +285,8 @@ impl IndexPass for InheritancePass {
                 })
                 .count();
         }
-        ctx.store.replace_edges_of_types(
-            &["INHERITS", "IMPLEMENTS", "DECORATES"],
-            &inheritance_edges,
-        )?;
+        ctx.store
+            .replace_edges_of_types(&["INHERITS", "IMPLEMENTS", "DECORATES"], &inheritance_edges)?;
         ctx.edge_count += inheritance_edges.len();
         Ok(PassOutcome {
             edges_written: inheritance_edges.len(),
@@ -315,8 +313,7 @@ impl IndexPass for SemanticPass {
                 semantically_related_edges: 0,
             }
         };
-        let edges =
-            semantic.similar_edges + semantic.semantically_related_edges;
+        let edges = semantic.similar_edges + semantic.semantically_related_edges;
         ctx.edge_count += edges;
         ctx.semantic = semantic.clone();
         Ok(PassOutcome {

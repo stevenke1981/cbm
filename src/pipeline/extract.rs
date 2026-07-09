@@ -296,25 +296,58 @@ fn extract_symbols_regex(file_path: &str, language: &str, content: &str) -> Vec<
         "csharp" => &[
             (r"(?m)^\s*class\s+(\w+)", "Class"),
             (r"(?m)^\s*interface\s+(\w+)", "Class"),
-            (r"(?m)^\s*(?:public|private|protected|internal|static|\s)*void\s+(\w+)\s*\(", "Function"),
-            (r"(?m)^\s*(?:public|private|protected|internal|static|\s)*(?:int|string|bool|Task(?:<[^>]+>)?)\s+(\w+)\s*\(", "Function"),
+            (
+                r"(?m)^\s*(?:public|private|protected|internal|static|\s)*void\s+(\w+)\s*\(",
+                "Function",
+            ),
+            (
+                r"(?m)^\s*(?:public|private|protected|internal|static|\s)*(?:int|string|bool|Task(?:<[^>]+>)?)\s+(\w+)\s*\(",
+                "Function",
+            ),
         ],
         "php" => &[
-            (r"(?m)^\s*(?:public|private|protected|static|\s)*function\s+(\w+)", "Function"),
+            (
+                r"(?m)^\s*(?:public|private|protected|static|\s)*function\s+(\w+)",
+                "Function",
+            ),
             (r"(?m)^\s*class\s+(\w+)", "Class"),
         ],
         "shell" | "bash" => &[(r"(?m)^\s*(\w+)\s*\(\s*\)\s*\{", "Function")],
         "kotlin" => &[
-            (r"(?m)^\s*(?:override\s+|private\s+|public\s+|internal\s+|protected\s+|open\s+|suspend\s+)*fun\s+(\w+)", "Function"),
-            (r"(?m)^\s*(?:private\s+|public\s+|internal\s+|open\s+|data\s+|sealed\s+)*class\s+(\w+)", "Class"),
-            (r"(?m)^\s*(?:private\s+|public\s+|internal\s+)*object\s+(\w+)", "Class"),
-            (r"(?m)^\s*(?:private\s+|public\s+|internal\s+)*interface\s+(\w+)", "Class"),
+            (
+                r"(?m)^\s*(?:override\s+|private\s+|public\s+|internal\s+|protected\s+|open\s+|suspend\s+)*fun\s+(\w+)",
+                "Function",
+            ),
+            (
+                r"(?m)^\s*(?:private\s+|public\s+|internal\s+|open\s+|data\s+|sealed\s+)*class\s+(\w+)",
+                "Class",
+            ),
+            (
+                r"(?m)^\s*(?:private\s+|public\s+|internal\s+)*object\s+(\w+)",
+                "Class",
+            ),
+            (
+                r"(?m)^\s*(?:private\s+|public\s+|internal\s+)*interface\s+(\w+)",
+                "Class",
+            ),
         ],
         "swift" => &[
-            (r"(?m)^\s*(?:public\s+|private\s+|internal\s+|fileprivate\s+|open\s+|static\s+|override\s+)*func\s+(\w+)", "Function"),
-            (r"(?m)^\s*(?:public\s+|private\s+|internal\s+|open\s+|final\s+)*class\s+(\w+)", "Class"),
-            (r"(?m)^\s*(?:public\s+|private\s+|internal\s+)*struct\s+(\w+)", "Class"),
-            (r"(?m)^\s*(?:public\s+|private\s+|internal\s+)*protocol\s+(\w+)", "Class"),
+            (
+                r"(?m)^\s*(?:public\s+|private\s+|internal\s+|fileprivate\s+|open\s+|static\s+|override\s+)*func\s+(\w+)",
+                "Function",
+            ),
+            (
+                r"(?m)^\s*(?:public\s+|private\s+|internal\s+|open\s+|final\s+)*class\s+(\w+)",
+                "Class",
+            ),
+            (
+                r"(?m)^\s*(?:public\s+|private\s+|internal\s+)*struct\s+(\w+)",
+                "Class",
+            ),
+            (
+                r"(?m)^\s*(?:public\s+|private\s+|internal\s+)*protocol\s+(\w+)",
+                "Class",
+            ),
         ],
         _ => &[(r"(?m)^\s*(?:fn|def|func)\s+(\w+)", "Function")],
     };
@@ -387,7 +420,8 @@ class Greeter {
             "expected hello function: {syms:?}"
         );
         assert!(
-            syms.iter().any(|s| s.name == "Greeter" && s.label == "Class"),
+            syms.iter()
+                .any(|s| s.name == "Greeter" && s.label == "Class"),
             "expected Greeter class: {syms:?}"
         );
     }
@@ -409,7 +443,8 @@ class Greeter {
             "expected hello: {syms:?}"
         );
         assert!(
-            syms.iter().any(|s| s.name == "Greeter" && s.label == "Class"),
+            syms.iter()
+                .any(|s| s.name == "Greeter" && s.label == "Class"),
             "expected Greeter: {syms:?}"
         );
     }

@@ -336,8 +336,7 @@ impl AstInheritanceResolver {
             let Some(src) = resolve_local_or_project(&hit.child, local_index, project_index) else {
                 continue;
             };
-            let dst =
-                resolve_target_name(&hit.parent, local_index, project_index, file_path);
+            let dst = resolve_target_name(&hit.parent, local_index, project_index, file_path);
             let key = (src.clone(), dst.clone(), hit.edge_type.to_string());
             if seen.insert(key) {
                 edges.push(Edge {
@@ -397,9 +396,7 @@ pub(crate) fn resolve_target_name(
 }
 
 fn simple_name(name: &str) -> &str {
-    name.rsplit(['.', ':', '/'])
-        .next()
-        .unwrap_or(name)
+    name.rsplit(['.', ':', '/']).next().unwrap_or(name)
 }
 
 #[cfg(test)]
@@ -422,12 +419,7 @@ mod tests {
         ]);
         let project = HashMap::new();
         let edges = r
-            .try_resolve(
-                "m.py",
-                "class Child(Parent):\n    pass\n",
-                &local,
-                &project,
-            )
+            .try_resolve("m.py", "class Child(Parent):\n    pass\n", &local, &project)
             .unwrap();
         assert!(
             edges.iter().any(|e| {

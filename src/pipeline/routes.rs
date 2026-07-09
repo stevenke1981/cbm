@@ -102,27 +102,60 @@ pub fn extract_http_client_calls(
     let patterns: &[(&str, Option<&str>)] = match language {
         "javascript" | "typescript" | "tsx" | "jsx" => &[
             (r#"\bfetch\s*\(\s*["'`]([^"'`]+)["'`]"#, None),
-            (r#"\baxios\.(get|post|put|delete|patch)\s*\(\s*["'`]([^"'`]+)["'`]"#, Some("method_url")),
+            (
+                r#"\baxios\.(get|post|put|delete|patch)\s*\(\s*["'`]([^"'`]+)["'`]"#,
+                Some("method_url"),
+            ),
             (r#"\baxios\s*\(\s*\{\s*url\s*:\s*["'`]([^"'`]+)["'`]"#, None),
-            (r#"\b(?:http|https)\.(get|post|put|delete|patch)\s*\(\s*["'`]([^"'`]+)["'`]"#, Some("method_url")),
+            (
+                r#"\b(?:http|https)\.(get|post|put|delete|patch)\s*\(\s*["'`]([^"'`]+)["'`]"#,
+                Some("method_url"),
+            ),
         ],
         "python" => &[
-            (r#"\brequests\.(get|post|put|delete|patch)\s*\(\s*["']([^"']+)["']"#, Some("method_url")),
-            (r#"\bhttpx\.(get|post|put|delete|patch)\s*\(\s*["']([^"']+)["']"#, Some("method_url")),
-            (r#"\b(?:client|session)\.(get|post|put|delete|patch)\s*\(\s*["']([^"']+)["']"#, Some("method_url")),
+            (
+                r#"\brequests\.(get|post|put|delete|patch)\s*\(\s*["']([^"']+)["']"#,
+                Some("method_url"),
+            ),
+            (
+                r#"\bhttpx\.(get|post|put|delete|patch)\s*\(\s*["']([^"']+)["']"#,
+                Some("method_url"),
+            ),
+            (
+                r#"\b(?:client|session)\.(get|post|put|delete|patch)\s*\(\s*["']([^"']+)["']"#,
+                Some("method_url"),
+            ),
             (r#"\burlopen\s*\(\s*["']([^"']+)["']"#, None),
         ],
         "rust" => &[
-            (r#"\breqwest::(?:get|post|put|delete|patch)\s*\(\s*["']([^"']+)["']"#, None),
-            (r#"\.(?:get|post|put|delete|patch)\s*\(\s*["']([^"']+)["']"#, None),
-            (r#"Client::new\(\)[\s\S]{0,80}?\.get\s*\(\s*["']([^"']+)["']"#, None),
+            (
+                r#"\breqwest::(?:get|post|put|delete|patch)\s*\(\s*["']([^"']+)["']"#,
+                None,
+            ),
+            (
+                r#"\.(?:get|post|put|delete|patch)\s*\(\s*["']([^"']+)["']"#,
+                None,
+            ),
+            (
+                r#"Client::new\(\)[\s\S]{0,80}?\.get\s*\(\s*["']([^"']+)["']"#,
+                None,
+            ),
         ],
         "go" => &[
-            (r#"\bhttp\.(?:Get|Post|Put|Delete)\s*\(\s*["']([^"']+)["']"#, None),
-            (r#"\bNewRequest\s*\(\s*["'](\w+)["']\s*,\s*["']([^"']+)["']"#, Some("go_newrequest")),
+            (
+                r#"\bhttp\.(?:Get|Post|Put|Delete)\s*\(\s*["']([^"']+)["']"#,
+                None,
+            ),
+            (
+                r#"\bNewRequest\s*\(\s*["'](\w+)["']\s*,\s*["']([^"']+)["']"#,
+                Some("go_newrequest"),
+            ),
         ],
         "java" | "kotlin" => &[
-            (r#"\.(?:get|post|put|delete|patch)\s*\(\s*["']([^"']+)["']"#, None),
+            (
+                r#"\.(?:get|post|put|delete|patch)\s*\(\s*["']([^"']+)["']"#,
+                None,
+            ),
             (r#"Uri\.(?:parse|of)\s*\(\s*["']([^"']+)["']"#, None),
         ],
         _ => &[],
@@ -143,10 +176,7 @@ pub fn extract_http_client_calls(
                     cap.get(2).map(|m| m.as_str()).unwrap_or(""),
                     cap.get(1).map(|m| m.as_str().to_uppercase()),
                 ),
-                _ => (
-                    cap.get(1).map(|m| m.as_str()).unwrap_or(""),
-                    None,
-                ),
+                _ => (cap.get(1).map(|m| m.as_str()).unwrap_or(""), None),
             };
             if path.is_empty() {
                 continue;
@@ -236,8 +266,16 @@ pub fn link_http_calls(client_calls: &[HttpClientCall], route_edges: &[Edge]) ->
 
 /// Match `/users/:id` or `/users/{id}` against `/users/42`.
 fn paths_template_match(template: &str, concrete: &str) -> bool {
-    let t: Vec<&str> = template.trim_matches('/').split('/').filter(|s| !s.is_empty()).collect();
-    let c: Vec<&str> = concrete.trim_matches('/').split('/').filter(|s| !s.is_empty()).collect();
+    let t: Vec<&str> = template
+        .trim_matches('/')
+        .split('/')
+        .filter(|s| !s.is_empty())
+        .collect();
+    let c: Vec<&str> = concrete
+        .trim_matches('/')
+        .split('/')
+        .filter(|s| !s.is_empty())
+        .collect();
     if t.len() != c.len() {
         return false;
     }
@@ -250,13 +288,25 @@ fn paths_template_match(template: &str, concrete: &str) -> bool {
 }
 
 fn path_segments_compatible(a: &str, b: &str) -> bool {
-    let sa: Vec<&str> = a.trim_matches('/').split('/').filter(|s| !s.is_empty()).collect();
-    let sb: Vec<&str> = b.trim_matches('/').split('/').filter(|s| !s.is_empty()).collect();
+    let sa: Vec<&str> = a
+        .trim_matches('/')
+        .split('/')
+        .filter(|s| !s.is_empty())
+        .collect();
+    let sb: Vec<&str> = b
+        .trim_matches('/')
+        .split('/')
+        .filter(|s| !s.is_empty())
+        .collect();
     if sa.is_empty() || sb.is_empty() {
         return false;
     }
     // share last static segment
-    sa.last() == sb.last() && sa.last().is_some_and(|s| s.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'))
+    sa.last() == sb.last()
+        && sa.last().is_some_and(|s| {
+            s.chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        })
 }
 
 fn path_from_route_qn(qn: &str) -> Option<String> {

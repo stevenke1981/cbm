@@ -57,7 +57,9 @@ impl ImportResolver {
                 .or_else(|| path.strip_suffix("/mod.rs"))
                 .or_else(|| path.strip_suffix("/__init__.py"))
             {
-                by_stem.entry(dir.to_string()).or_insert_with(|| path.clone());
+                by_stem
+                    .entry(dir.to_string())
+                    .or_insert_with(|| path.clone());
             }
             if path.ends_with("/__init__.py") || path == "__init__.py" {
                 let root = path
@@ -150,18 +152,10 @@ impl ImportResolver {
             r#"{{"specifier":"{}","kind":"{kind}","method":"external"}}"#,
             json_escape(specifier)
         );
-        (
-            format!("{module_key}::Module::{module_key}"),
-            props,
-        )
+        (format!("{module_key}::Module::{module_key}"), props)
     }
 
-    fn resolve_relative(
-        &self,
-        file_path: &str,
-        language: &str,
-        specifier: &str,
-    ) -> Option<String> {
+    fn resolve_relative(&self, file_path: &str, language: &str, specifier: &str) -> Option<String> {
         let base_dir = parent_dir(file_path);
         let joined = join_relative(&base_dir, specifier);
         self.lookup_file(&joined, language)
@@ -297,12 +291,21 @@ fn collect_import_specs(language: &str, content: &str) -> Vec<(String, String)> 
         "csharp" => &[(r"(?m)^\s*using\s+([\w.]+)\s*;", "using")],
         "ruby" => &[
             (r#"(?m)^\s*require\s+['"]([^'"]+)['"]"#, "require"),
-            (r#"(?m)^\s*require_relative\s+['"]([^'"]+)['"]"#, "require_relative"),
+            (
+                r#"(?m)^\s*require_relative\s+['"]([^'"]+)['"]"#,
+                "require_relative",
+            ),
         ],
         "php" => &[
             (r"(?m)^\s*use\s+([\w\\]+)\s*;", "use"),
-            (r#"(?m)require(?:_once)?\s*\(?\s*['"]([^'"]+)['"]"#, "require"),
-            (r#"(?m)include(?:_once)?\s*\(?\s*['"]([^'"]+)['"]"#, "include"),
+            (
+                r#"(?m)require(?:_once)?\s*\(?\s*['"]([^'"]+)['"]"#,
+                "require",
+            ),
+            (
+                r#"(?m)include(?:_once)?\s*\(?\s*['"]([^'"]+)['"]"#,
+                "include",
+            ),
         ],
         "c" | "cpp" => &[(r#"(?m)^\s*#\s*include\s*[<"]([^>"]+)[>"]"#, "include")],
         _ => &[],
@@ -336,8 +339,10 @@ fn is_relative_or_path_import(specifier: &str, language: &str) -> bool {
         return true;
     }
     // Windows absolute rarely appears in imports; treat bare paths with slash
-    if matches!(language, "javascript" | "typescript" | "tsx" | "jsx" | "c" | "cpp")
-        && specifier.contains('/')
+    if matches!(
+        language,
+        "javascript" | "typescript" | "tsx" | "jsx" | "c" | "cpp"
+    ) && specifier.contains('/')
         && !specifier.contains(':')
     {
         // local path-like without package scope (@scope/pkg has @)
@@ -561,14 +566,13 @@ mod tests {
 
     #[test]
     fn resolves_js_relative_import() {
-        let resolver = ImportResolver::new(vec![
-            "src/main.js".into(),
-            "src/util/helper.js".into(),
-        ]);
+        let resolver = ImportResolver::new(vec!["src/main.js".into(), "src/util/helper.js".into()]);
         let src = "import { x } from './util/helper';\n";
         let edges = resolver.extract("src/main.js", "javascript", src);
         assert!(
-            edges.iter().any(|e| e.dst_qn.contains("src/util/helper.js::File::")),
+            edges
+                .iter()
+                .any(|e| e.dst_qn.contains("src/util/helper.js::File::")),
             "{edges:?}"
         );
         assert!(edges[0]
@@ -606,7 +610,9 @@ mod tests {
         let src = "mod util;\n";
         let edges = resolver.extract("src/lib.rs", "rust", src);
         assert!(
-            edges.iter().any(|e| e.dst_qn.contains("src/util.rs::File::")),
+            edges
+                .iter()
+                .any(|e| e.dst_qn.contains("src/util.rs::File::")),
             "{edges:?}"
         );
     }
@@ -624,7 +630,10 @@ mod tests {
 }"#
             .into(),
         );
-        contents.insert("src/main.ts".into(), "import x from '@/util/helper';\n".into());
+        contents.insert(
+            "src/main.ts".into(),
+            "import x from '@/util/helper';\n".into(),
+        );
         contents.insert("src/util/helper.ts".into(), "export const x = 1;\n".into());
         let files = vec![
             "tsconfig.json".into(),
@@ -632,7 +641,11 @@ mod tests {
             "src/util/helper.ts".into(),
         ];
         let resolver = ImportResolver::from_project_files(files, &contents);
-        let edges = resolver.extract("src/main.ts", "typescript", contents.get("src/main.ts").unwrap());
+        let edges = resolver.extract(
+            "src/main.ts",
+            "typescript",
+            contents.get("src/main.ts").unwrap(),
+        );
         assert!(
             edges
                 .iter()

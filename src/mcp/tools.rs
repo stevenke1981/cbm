@@ -292,8 +292,7 @@ impl ToolHandler {
             } else {
                 // last known completed job for project (scan jobs)
                 // optional: leave indexing=false
-                obj.entry("indexing".to_string())
-                    .or_insert(json!(false));
+                obj.entry("indexing".to_string()).or_insert(json!(false));
             }
             if let Some(watcher) = &self.watcher {
                 let projects = watcher.project_status();

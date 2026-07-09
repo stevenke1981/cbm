@@ -151,9 +151,10 @@ impl Store {
             "DELETE FROM files WHERE project = ?1",
             params![self.project],
         )?;
-        let _ = self
-            .conn
-            .execute("DELETE FROM files_fts WHERE project = ?1", params![self.project]);
+        let _ = self.conn.execute(
+            "DELETE FROM files_fts WHERE project = ?1",
+            params![self.project],
+        );
         self.clear_vectors()?;
         self.conn
             .execute("DELETE FROM meta WHERE project = ?1", params![self.project])?;
@@ -177,9 +178,10 @@ impl Store {
             "DELETE FROM files WHERE project = ?1",
             params![self.project],
         )?;
-        let _ = self
-            .conn
-            .execute("DELETE FROM files_fts WHERE project = ?1", params![self.project]);
+        let _ = self.conn.execute(
+            "DELETE FROM files_fts WHERE project = ?1",
+            params![self.project],
+        );
         self.clear_vectors()?;
         Ok(())
     }
@@ -501,12 +503,12 @@ impl Store {
             param_idx += 1;
         }
 
-        // query: push down a LIKE filter on name + qualified_name to cut down rows.
-        // The full Rust filter (which also checks signature) still runs afterward.
+        // query: push down a LIKE filter on name + qualified_name + signature to cut down rows.
+        // The full Rust filter still runs afterward to keep matching semantics centralized.
         if let Some(q) = &filter.query {
             let like_q = format!("%{}%", q.replace('%', "\\%").replace('_', "\\_"));
             conditions.push(format!(
-                "(name LIKE ?{param_idx} ESCAPE '\\' OR qualified_name LIKE ?{param_idx} ESCAPE '\\')"
+                "(name LIKE ?{param_idx} ESCAPE '\\' OR qualified_name LIKE ?{param_idx} ESCAPE '\\' OR signature LIKE ?{param_idx} ESCAPE '\\')"
             ));
             param_values.push(Box::new(like_q));
             param_idx += 1;
@@ -923,9 +925,9 @@ impl Store {
         })?;
 
         // Prefer meta written by CommunitiesPass (O(1)); fall back to scan.
-        let (community_count, top_communities) = self.community_summary_from_meta()?.unwrap_or_else(
-            || self.community_summary_from_symbols().unwrap_or((0, vec![])),
-        );
+        let (community_count, top_communities) = self
+            .community_summary_from_meta()?
+            .unwrap_or_else(|| self.community_summary_from_symbols().unwrap_or((0, vec![])));
 
         Ok(ArchitectureSummary {
             project: self.project.clone(),
@@ -967,9 +969,7 @@ impl Store {
 
     /// Read compact community summary written during indexing (`community_samples` meta).
     /// Returns `None` when meta is missing so callers can fall back to a symbol scan.
-    fn community_summary_from_meta(
-        &self,
-    ) -> Result<Option<(usize, Vec<CommunitySummary>)>> {
+    fn community_summary_from_meta(&self) -> Result<Option<(usize, Vec<CommunitySummary>)>> {
         let count_meta = self.get_meta("community_count")?;
         let samples_meta = self.get_meta("community_samples")?;
         // Legacy DBs only have community_count / properties_json — fall back to scan.
@@ -991,7 +991,9 @@ impl Store {
             let Some(id_s) = segs.next() else { continue };
             let Some(count_s) = segs.next() else { continue };
             let samples = segs.next().unwrap_or("");
-            let Ok(id) = id_s.parse::<u32>() else { continue };
+            let Ok(id) = id_s.parse::<u32>() else {
+                continue;
+            };
             let Ok(symbol_count) = count_s.parse::<usize>() else {
                 continue;
             };
@@ -1597,6 +1599,34 @@ mod tests {
         let result = store.search(&SearchFilter::default()).unwrap();
         assert_eq!(result.total, 1, "search count mismatch");
         assert_eq!(result.symbols.len(), 1, "search rows mismatch");
+    }
+
+    #[test]
+    fn search_query_matches_signature_only() {
+        let store = Store::open_memory().unwrap();
+        store
+            .upsert_symbol(&Symbol {
+                qualified_name: "a.rs::Function::handler@L1".into(),
+                name: "handler".into(),
+                label: "Function".into(),
+                file_path: "a.rs".into(),
+                line_start: 1,
+                line_end: 3,
+                signature: Some("fn handler(user_id: AccountId)".into()),
+                properties_json: None,
+            })
+            .unwrap();
+
+        let result = store
+            .search(&SearchFilter {
+                query: Some("AccountId".into()),
+                limit: 10,
+                ..Default::default()
+            })
+            .unwrap();
+
+        assert_eq!(result.total, 1);
+        assert_eq!(result.symbols[0].name, "handler");
     }
 
     #[test]

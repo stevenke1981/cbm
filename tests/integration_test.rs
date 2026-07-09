@@ -830,11 +830,15 @@ class Dog : Animal(), Runnable {
     let store = Store::open(&index.project).unwrap();
     let symbols = store.list_symbols().unwrap();
     assert!(
-        symbols.iter().any(|s| s.name == "bark" && s.file_path.ends_with(".kt")),
+        symbols
+            .iter()
+            .any(|s| s.name == "bark" && s.file_path.ends_with(".kt")),
         "kotlin function missing: {symbols:?}"
     );
     assert!(
-        symbols.iter().any(|s| s.name == "Dog" && s.label == "Class"),
+        symbols
+            .iter()
+            .any(|s| s.name == "Dog" && s.label == "Class"),
         "kotlin class missing: {symbols:?}"
     );
     assert!(
@@ -868,7 +872,9 @@ fn indexes_ruby_and_csharp_symbols() {
     let store = Store::open(&index.project).unwrap();
     let symbols = store.list_symbols().unwrap();
     assert!(
-        symbols.iter().any(|s| s.file_path.ends_with(".rb") && s.name == "hello"),
+        symbols
+            .iter()
+            .any(|s| s.file_path.ends_with(".rb") && s.name == "hello"),
         "ruby method missing: {symbols:?}"
     );
     assert!(

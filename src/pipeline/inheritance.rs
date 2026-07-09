@@ -294,9 +294,9 @@ fn extract_inheritance_regex(
         }
         "csharp" => {
             // class Child : Parent, IFace
-            if let Ok(re) =
-                Regex::new(r"(?m)^\s*(?:public\s+|internal\s+|private\s+)?class\s+(\w+)\s*:\s*([^{\n]+)")
-            {
+            if let Ok(re) = Regex::new(
+                r"(?m)^\s*(?:public\s+|internal\s+|private\s+)?class\s+(\w+)\s*:\s*([^{\n]+)",
+            ) {
                 for cap in re.captures_iter(content) {
                     let Some(child) = cap.get(1) else { continue };
                     let Some(bases) = cap.get(2) else { continue };
@@ -414,20 +414,11 @@ fn extract_pairs<'a>(
     }
 }
 
-fn extract_decorators(
-    file_path: &str,
-    content: &str,
-    symbols: &[Symbol],
-    edges: &mut Vec<Edge>,
-) {
+fn extract_decorators(file_path: &str, content: &str, symbols: &[Symbol], edges: &mut Vec<Edge>) {
     let mut seen = HashSet::new();
     // already-seen from AST edges
     for e in edges.iter() {
-        seen.insert((
-            e.src_qn.clone(),
-            e.dst_qn.clone(),
-            e.edge_type.clone(),
-        ));
+        seen.insert((e.src_qn.clone(), e.dst_qn.clone(), e.edge_type.clone()));
     }
     let Ok(re) = Regex::new(r"(?m)^\s*#?\[?@([\w.:]+)") else {
         return;
@@ -538,10 +529,7 @@ mod tests {
             sym("a.ts", "Parent", "Class", 5),
         ];
         let edges = extract_inheritance_edges("a.ts", "typescript", src, &symbols);
-        assert!(
-            edges.iter().any(|e| e.edge_type == "INHERITS"),
-            "{edges:?}"
-        );
+        assert!(edges.iter().any(|e| e.edge_type == "INHERITS"), "{edges:?}");
     }
 
     #[test]
@@ -552,13 +540,8 @@ mod tests {
             sym("child.py", "Child", "Class", 1),
             sym("parent.py", "Parent", "Class", 1),
         ];
-        let edges = extract_inheritance_edges_with_project(
-            "child.py",
-            "python",
-            src,
-            &file_symbols,
-            &all,
-        );
+        let edges =
+            extract_inheritance_edges_with_project("child.py", "python", src, &file_symbols, &all);
         assert!(
             edges.iter().any(|e| {
                 e.edge_type == "INHERITS" && e.dst_qn.contains("parent.py::Class::Parent")

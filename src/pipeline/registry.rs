@@ -241,10 +241,8 @@ mod tests {
 
     #[test]
     fn prefers_same_file() {
-        let reg = FunctionRegistry::from_symbols(&[
-            fun("a.rs", "helper", 1),
-            fun("b.rs", "helper", 1),
-        ]);
+        let reg =
+            FunctionRegistry::from_symbols(&[fun("a.rs", "helper", 1), fun("b.rs", "helper", 1)]);
         let r = reg.resolve("helper", "a.rs", &HashSet::new());
         assert_eq!(r.len(), 1);
         assert_eq!(r[0].strategy, ResolveStrategy::SameFile);
@@ -268,10 +266,8 @@ mod tests {
 
     #[test]
     fn refuses_ambiguous_without_import() {
-        let reg = FunctionRegistry::from_symbols(&[
-            fun("a.rs", "helper", 1),
-            fun("b.rs", "helper", 1),
-        ]);
+        let reg =
+            FunctionRegistry::from_symbols(&[fun("a.rs", "helper", 1), fun("b.rs", "helper", 1)]);
         let r = reg.resolve("helper", "c.rs", &HashSet::new());
         assert!(r.is_empty());
     }
