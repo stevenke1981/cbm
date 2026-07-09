@@ -54,6 +54,9 @@ fn lang_cpp() -> Language {
 fn lang_ruby() -> Language {
     tree_sitter_ruby::LANGUAGE.into()
 }
+fn lang_kotlin() -> Language {
+    tree_sitter_kotlin_ng::LANGUAGE.into()
+}
 
 const PROFILES: &[InheritanceProfile] = &[
     InheritanceProfile {
@@ -192,6 +195,24 @@ const PROFILES: &[InheritanceProfile] = &[
 (class
   name: (constant) @child
   superclass: (scope_resolution name: (constant) @parent))
+"#,
+    },
+    InheritanceProfile {
+        language_id: "kotlin",
+        language_fn: lang_kotlin,
+        // constructor_invocation ≈ class super(); user_type ≈ interface-style parent
+        query_src: r#"
+(class_declaration
+  name: (identifier) @child
+  (delegation_specifiers
+    (delegation_specifier
+      (constructor_invocation
+        (user_type (identifier) @parent)))))
+(class_declaration
+  name: (identifier) @child
+  (delegation_specifiers
+    (delegation_specifier
+      (user_type (identifier) @iface))))
 "#,
     },
 ];

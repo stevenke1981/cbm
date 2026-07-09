@@ -82,6 +82,7 @@ fn language_for_ts(language: &str) -> Option<Language> {
         "csharp" => tree_sitter_c_sharp::LANGUAGE.into(),
         "php" => tree_sitter_php::LANGUAGE_PHP.into(),
         "shell" | "bash" => tree_sitter_bash::LANGUAGE.into(),
+        "kotlin" => tree_sitter_kotlin_ng::LANGUAGE.into(),
         _ => return None,
     })
 }
@@ -174,6 +175,14 @@ fn query_for_language(language: &str) -> (&'static str, &'static str) {
             "#,
             "Function",
         ),
+        "kotlin" => (
+            r#"
+            (function_declaration name: (identifier) @name) @definition
+            (class_declaration name: (identifier) @name) @definition
+            (object_declaration name: (identifier) @name) @definition
+            "#,
+            "Function",
+        ),
         _ => (r#"(identifier) @name"#, "Function"),
     }
 }
@@ -220,6 +229,7 @@ fn label_for_kind(kind: &str) -> Option<&'static str> {
         | "class_specifier"
         | "class_definition"
         | "class_declaration"
+        | "object_declaration"
         | "enum_item"
         | "trait_item"
         | "impl_item"
@@ -282,6 +292,12 @@ fn extract_symbols_regex(file_path: &str, language: &str, content: &str) -> Vec<
             (r"(?m)^\s*class\s+(\w+)", "Class"),
         ],
         "shell" | "bash" => &[(r"(?m)^\s*(\w+)\s*\(\s*\)\s*\{", "Function")],
+        "kotlin" => &[
+            (r"(?m)^\s*(?:override\s+|private\s+|public\s+|internal\s+|protected\s+|open\s+|suspend\s+)*fun\s+(\w+)", "Function"),
+            (r"(?m)^\s*(?:private\s+|public\s+|internal\s+|open\s+|data\s+|sealed\s+)*class\s+(\w+)", "Class"),
+            (r"(?m)^\s*(?:private\s+|public\s+|internal\s+)*object\s+(\w+)", "Class"),
+            (r"(?m)^\s*(?:private\s+|public\s+|internal\s+)*interface\s+(\w+)", "Class"),
+        ],
         _ => &[(r"(?m)^\s*(?:fn|def|func)\s+(\w+)", "Function")],
     };
 
@@ -334,5 +350,27 @@ mod tests {
         let syms = extract_symbols("mod.py", "python", src).unwrap();
         assert!(syms.iter().any(|s| s.name == "foo"));
         assert!(syms.iter().any(|s| s.name == "Bar"));
+    }
+
+    #[test]
+    fn extracts_kotlin_functions_and_classes() {
+        let src = r#"
+class Greeter {
+  fun hello() {
+    world()
+  }
+  fun world() {}
+}
+"#;
+        let syms = extract_symbols("Main.kt", "kotlin", src).unwrap();
+        assert!(
+            syms.iter()
+                .any(|s| s.name == "hello" && s.label == "Function"),
+            "expected hello function: {syms:?}"
+        );
+        assert!(
+            syms.iter().any(|s| s.name == "Greeter" && s.label == "Class"),
+            "expected Greeter class: {syms:?}"
+        );
     }
 }

@@ -677,6 +677,48 @@ fn emits_http_calls_linking_client_to_route() {
 }
 
 #[test]
+fn indexes_kotlin_calls_and_inherits() {
+    let (_guard, _cache, _) = isolated_cache();
+    let dir = TempDir::new().unwrap();
+    fs::write(
+        dir.path().join("Animals.kt"),
+        r#"
+open class Animal
+interface Runnable
+class Dog : Animal(), Runnable {
+  fun bark() {
+    run()
+  }
+  fun run() {}
+}
+"#,
+    )
+    .unwrap();
+
+    let pipeline = Pipeline::new(IndexMode::Full);
+    let index = pipeline.run(dir.path(), Some("kotlin-graph")).unwrap();
+    let store = Store::open(&index.project).unwrap();
+    let symbols = store.list_symbols().unwrap();
+    assert!(
+        symbols.iter().any(|s| s.name == "bark" && s.file_path.ends_with(".kt")),
+        "kotlin function missing: {symbols:?}"
+    );
+    assert!(
+        symbols.iter().any(|s| s.name == "Dog" && s.label == "Class"),
+        "kotlin class missing: {symbols:?}"
+    );
+    assert!(
+        store.count_edges_by_type("CALLS").unwrap() >= 1,
+        "expected CALLS bark->run"
+    );
+    let inh = store.count_edges_by_type("INHERITS").unwrap()
+        + store.count_edges_by_type("IMPLEMENTS").unwrap();
+    assert!(inh >= 1, "expected INHERITS/IMPLEMENTS for Dog");
+
+    let _ = cbm::store::delete_project_db(&index.project);
+}
+
+#[test]
 fn indexes_ruby_and_csharp_symbols() {
     let (_guard, _cache, _) = isolated_cache();
     let dir = TempDir::new().unwrap();

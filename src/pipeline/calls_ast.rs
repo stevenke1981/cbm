@@ -69,6 +69,9 @@ fn lang_php() -> Language {
 fn lang_bash() -> Language {
     tree_sitter_bash::LANGUAGE.into()
 }
+fn lang_kotlin() -> Language {
+    tree_sitter_kotlin_ng::LANGUAGE.into()
+}
 
 const PROFILES: &[AstCallProfile] = &[
     AstCallProfile {
@@ -199,6 +202,17 @@ const PROFILES: &[AstCallProfile] = &[
         query_src: r#"
 (command
   name: (command_name (word) @callee))
+"#,
+    },
+    AstCallProfile {
+        language_id: "kotlin",
+        language_fn: lang_kotlin,
+        query_src: r#"
+(call_expression
+  (identifier) @callee)
+(call_expression
+  (navigation_expression
+    (identifier) @method))
 "#,
     },
 ];

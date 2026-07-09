@@ -205,7 +205,11 @@ fn collect_import_specs(language: &str, content: &str) -> Vec<(String, String)> 
             (r#"(?m)^\s*import\s+"([^"]+)""#, "import"),
             (r#"(?m)^\s*"([^"]+)""#, "import_block"),
         ],
-        "java" | "kotlin" => &[(r"(?m)^\s*import\s+([\w.]+)\s*;", "import")],
+        "java" => &[(r"(?m)^\s*import\s+([\w.]+)\s*;", "import")],
+        "kotlin" => &[
+            (r"(?m)^\s*import\s+([\w.]+)", "import"),
+            (r"(?m)^\s*package\s+([\w.]+)", "package"),
+        ],
         "csharp" => &[(r"(?m)^\s*using\s+([\w.]+)\s*;", "using")],
         "ruby" => &[
             (r#"(?m)^\s*require\s+['"]([^'"]+)['"]"#, "require"),

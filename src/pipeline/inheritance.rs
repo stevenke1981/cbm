@@ -209,7 +209,7 @@ fn extract_inheritance_regex(
                 }
             }
         }
-        "java" | "kotlin" => {
+        "java" => {
             extract_pairs(
                 &mut ctx,
                 r"(?m)^\s*(?:public\s+|protected\s+|private\s+)?(?:abstract\s+|final\s+)?class\s+(\w+)\s+extends\s+(\w+)",
@@ -232,6 +232,42 @@ fn extract_inheritance_regex(
                         }
                         let dst = resolve_target_name(iface, local, project, file_path);
                         push_edge("IMPLEMENTS", src, &dst, "regex", &mut edges, &mut seen);
+                    }
+                }
+            }
+        }
+        "kotlin" => {
+            // class Child : Parent(), IFace
+            if let Ok(re) = Regex::new(
+                r"(?m)^\s*(?:open\s+|abstract\s+|data\s+|sealed\s+|private\s+|internal\s+)*class\s+(\w+)[^{]*:\s*([^{\n]+)",
+            ) {
+                for cap in re.captures_iter(content) {
+                    let Some(child) = cap.get(1) else { continue };
+                    let Some(bases) = cap.get(2) else { continue };
+                    let Some(src) = local.get(child.as_str()) else {
+                        continue;
+                    };
+                    for base in bases.as_str().split(',') {
+                        let base = base.trim();
+                        if base.is_empty() {
+                            continue;
+                        }
+                        // Strip constructor args: Parent() / Parent(x)
+                        let base_name = base
+                            .split('(')
+                            .next()
+                            .unwrap_or(base)
+                            .trim()
+                            .rsplit('.')
+                            .next()
+                            .unwrap_or(base);
+                        let edge_type = if base.contains('(') {
+                            "INHERITS"
+                        } else {
+                            "IMPLEMENTS"
+                        };
+                        let dst = resolve_target_name(base_name, local, project, file_path);
+                        push_edge(edge_type, src, &dst, "regex", &mut edges, &mut seen);
                     }
                 }
             }

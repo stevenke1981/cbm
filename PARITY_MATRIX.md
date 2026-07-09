@@ -36,7 +36,7 @@ Last updated: 2026-07-10 (INHERITS/IMPLEMENTS AST + cross-file resolve).
 | Graceful shutdown / cancel | Yes | Ctrl+C stops watcher/HTTP | MVP |
 | Background index jobs | Yes (supervised) | `index_repository background=true` + `IndexSupervisor` | Done |
 | Hybrid LSP type resolution | 9 language families | — | Not started |
-| Tree-sitter languages | 158 | 12 (Rust, Py, JS/TS, Go, Java, C, C++, Ruby, C#, PHP, Bash) | Partial |
+| Tree-sitter languages | 158 | 13 (Rust, Py, JS/TS, Go, Java, C, C++, Ruby, C#, PHP, Bash, Kotlin) | Partial |
 | FoundationDB backend | No (SQLite) | — | Omitted (SQLite only) |
 
 ## Indexing pipeline (heuristic passes marked)
@@ -141,8 +141,9 @@ These are **not done** and should not be inferred from MVP completion:
 | `search_code` FTS5 | — | **Done** |
 | Multi-language AST-aware CALLS | — | **Done** for 12 language families |
 | Store bulk transaction API | — | **Done** (`bulk_index`, `replace_edges_of_type`) |
-| INHERITS / IMPLEMENTS AST | — | **Done** for Py/JS/TS/Java/Rust/Go/C++/Ruby |
-| Tree-sitter coverage gaps | P2 | Kotlin, Swift, … (beyond current 12) |
+| INHERITS / IMPLEMENTS AST | — | **Done** for Py/JS/TS/Java/Rust/Go/C++/Ruby/Kotlin |
+| Kotlin grammar | — | **Done** (`tree-sitter-kotlin-ng`: extract/CALLS/inherits) |
+| Tree-sitter coverage gaps | P2 | Swift, … (beyond current 13) |
 | FoundationDB backend | — | Omitted; SQLite is canonical |
 | Wrapper packaging (Go/PyPI/npm/Chocolatey/AUR) | P3 | See `packaging/DEFERRED_CHANNELS.md` |
 | Full reference UI (React graph-ui) | P3 | Lightweight HTML is deliberate MVP |

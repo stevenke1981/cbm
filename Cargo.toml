@@ -47,6 +47,7 @@ tree-sitter-ruby = "0.23"
 tree-sitter-c-sharp = "0.23"
 tree-sitter-php = "0.23"
 tree-sitter-bash = "0.23"
+tree-sitter-kotlin-ng = "1.1"
 uuid = { version = "1", features = ["v4"] }
 walkdir = "2"
 zstd = "0.13"
