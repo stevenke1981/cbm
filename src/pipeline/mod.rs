@@ -9,6 +9,7 @@ mod routes;
 mod structure;
 
 pub use calls::*;
+pub use calls_ast::{AstCallProfile, AstCallResolver};
 pub use communities::*;
 pub use extract::*;
 pub use imports::*;
@@ -281,16 +282,21 @@ impl Pipeline {
         let mut all_symbols = Vec::new();
         for result in &file_results {
             all_symbols.extend(result.symbols.clone());
-            store.upsert_file(&result.source_file)?;
         }
 
-        store.upsert_symbols_batch(&all_symbols)?;
-        let (call_edges, semantic) = finalize_index(&store, repo_path, project_name, self.mode)?;
-        store.set_meta(
-            "semantic_enabled",
-            &semantic::is_semantic_enabled().to_string(),
-        )?;
-        store.checkpoint()?;
+        // Bulk write path: files + symbols + multi-pass edges under relaxed durability.
+        let (call_edges, semantic) = store.bulk_index(|| {
+            for result in &file_results {
+                store.upsert_file(&result.source_file)?;
+            }
+            store.upsert_symbols_batch(&all_symbols)?;
+            let finalized = finalize_index(&store, repo_path, project_name, self.mode)?;
+            store.set_meta(
+                "semantic_enabled",
+                &semantic::is_semantic_enabled().to_string(),
+            )?;
+            Ok(finalized)
+        })?;
         let artifact_path =
             maybe_export_artifact(repo_path, project_name, &store, self.export_artifact)?;
 

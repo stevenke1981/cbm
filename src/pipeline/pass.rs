@@ -132,8 +132,8 @@ impl IndexPass for StructurePass {
             &symbol_qns,
         );
         ctx.store.upsert_symbols_batch(&struct_symbols)?;
-        ctx.store.delete_edges_by_type("CONTAINS")?;
-        ctx.store.insert_edges_batch(&struct_edges)?;
+        ctx.store
+            .replace_edges_of_type("CONTAINS", &struct_edges)?;
         ctx.edge_count += struct_edges.len();
         Ok(PassOutcome {
             symbols_written: struct_symbols.len(),
@@ -159,8 +159,8 @@ impl IndexPass for ImportsPass {
                 &file.content,
             ));
         }
-        ctx.store.delete_edges_by_type("IMPORTS")?;
-        ctx.store.insert_edges_batch(&import_edges)?;
+        ctx.store
+            .replace_edges_of_type("IMPORTS", &import_edges)?;
         ctx.edge_count += import_edges.len();
         Ok(PassOutcome {
             edges_written: import_edges.len(),
@@ -178,8 +178,7 @@ impl IndexPass for CallsPass {
 
     fn run(&self, ctx: &mut PassContext<'_>) -> Result<PassOutcome> {
         let call_edges = rebuild_call_edges(ctx.store, &ctx.code_symbols)?;
-        ctx.store.delete_edges_by_type("CALLS")?;
-        ctx.store.insert_edges_batch(&call_edges)?;
+        ctx.store.replace_edges_of_type("CALLS", &call_edges)?;
         ctx.edge_count += call_edges.len();
         Ok(PassOutcome {
             edges_written: call_edges.len(),
@@ -208,8 +207,8 @@ impl IndexPass for RoutesPass {
                 ));
             }
         }
-        ctx.store.delete_edges_by_type("HTTP_ROUTE")?;
-        ctx.store.insert_edges_batch(&route_edges)?;
+        ctx.store
+            .replace_edges_of_type("HTTP_ROUTE", &route_edges)?;
         ctx.edge_count += route_edges.len();
         Ok(PassOutcome {
             edges_written: route_edges.len(),
@@ -238,10 +237,10 @@ impl IndexPass for InheritancePass {
                 ));
             }
         }
-        for edge_type in ["INHERITS", "IMPLEMENTS", "DECORATES"] {
-            ctx.store.delete_edges_by_type(edge_type)?;
-        }
-        ctx.store.insert_edges_batch(&inheritance_edges)?;
+        ctx.store.replace_edges_of_types(
+            &["INHERITS", "IMPLEMENTS", "DECORATES"],
+            &inheritance_edges,
+        )?;
         ctx.edge_count += inheritance_edges.len();
         Ok(PassOutcome {
             edges_written: inheritance_edges.len(),

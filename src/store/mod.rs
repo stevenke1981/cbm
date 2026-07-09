@@ -262,6 +262,78 @@ impl Store {
         Ok(())
     }
 
+    /// Delete all edges of `edge_type` then insert `edges` in one transaction.
+    /// Used by index passes to avoid partial intermediate graph states.
+    pub fn replace_edges_of_type(&self, edge_type: &str, edges: &[Edge]) -> Result<()> {
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute(
+            "DELETE FROM edges WHERE project = ?1 AND edge_type = ?2",
+            params![self.project, edge_type],
+        )?;
+        for edge in edges {
+            debug_assert_eq!(edge.edge_type, edge_type);
+            tx.execute(
+                "INSERT OR IGNORE INTO edges (src_qn, dst_qn, edge_type, project, properties_json)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![
+                    edge.src_qn,
+                    edge.dst_qn,
+                    edge.edge_type,
+                    self.project,
+                    edge.properties_json,
+                ],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Delete multiple edge types then insert all `edges` in one transaction.
+    pub fn replace_edges_of_types(&self, edge_types: &[&str], edges: &[Edge]) -> Result<()> {
+        let tx = self.conn.unchecked_transaction()?;
+        for edge_type in edge_types {
+            tx.execute(
+                "DELETE FROM edges WHERE project = ?1 AND edge_type = ?2",
+                params![self.project, edge_type],
+            )?;
+        }
+        for edge in edges {
+            tx.execute(
+                "INSERT OR IGNORE INTO edges (src_qn, dst_qn, edge_type, project, properties_json)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![
+                    edge.src_qn,
+                    edge.dst_qn,
+                    edge.edge_type,
+                    self.project,
+                    edge.properties_json,
+                ],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Run bulk indexing work with relaxed durability, then restore and checkpoint.
+    ///
+    /// Nested batch helpers still open their own transactions; this reduces fsync
+    /// cost during large index runs (DeusData bulk-dump style).
+    pub fn bulk_index<F, R>(&self, f: F) -> Result<R>
+    where
+        F: FnOnce() -> Result<R>,
+    {
+        // synchronous=OFF is safe here because we own the DB for the duration of
+        // a single-process index; crash mid-index is recovered by re-index.
+        self.conn.pragma_update(None, "synchronous", "OFF")?;
+        let result = f();
+        // Always restore durable settings even if f fails.
+        let _ = self.conn.pragma_update(None, "synchronous", "NORMAL");
+        if result.is_ok() {
+            let _ = self.checkpoint();
+        }
+        result
+    }
+
     pub fn upsert_file(&self, file: &SourceFile) -> Result<()> {
         let stored_content = codec::maybe_compress(&file.content);
         self.conn.execute(

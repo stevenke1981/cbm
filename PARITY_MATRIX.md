@@ -48,7 +48,8 @@ Last updated: 2026-07-09 (OOP pass pipeline + StorePool alignment).
 | Stable qualified names | Yes | Yes (`file::label::name@Lline`) | Done |
 | Structure nodes (Project/Folder/File) | Yes | Yes | Done |
 | Import edges | Yes | Regex per language | Partial (heuristic) |
-| CALLS edges | Yes | Rust AST + regex fallback | Partial (heuristic except Rust AST) |
+| CALLS edges | Yes | AST: Rust/Py/JS/TS/Go/Java/C/C++ + regex fallback | Done (supported langs) |
+| Store bulk transaction / replace edges | Yes | `bulk_index`, `replace_edges_of_type(s)` | Done |
 | INHERITS / IMPLEMENTS | Yes | Regex per language | Partial (heuristic) |
 | DECORATES | Yes | Attribute patterns | Partial (heuristic) |
 | HTTP route pass | Yes | `HTTP_ROUTE` Py/Express/Axum patterns | MVP (framework-limited) |
@@ -133,8 +134,8 @@ These are **not done** and should not be inferred from MVP completion:
 |------|----------|-------|
 | Leiden / Louvain communities | P2 | Replace connected-components MVP |
 | `HTTP_CALLS` pass | P2 | Client fetch/axios/reqwest edges |
-| Store bulk transaction API | P1 | Rollback + bulk pragma mode |
-| Multi-language AST-aware CALLS | P1 | Python, JS/TS, Go, Java, C/C++ |
+| Multi-language AST-aware CALLS | — | **Done** for Rust/Py/JS/TS/Go/Java/C/C++ (regex fallback otherwise) |
+| Store bulk transaction API | — | **Done** (`bulk_index`, `replace_edges_of_type`) |
 | Tree-sitter coverage gaps | P1 | Kotlin, Ruby, … |
 | FoundationDB backend | — | Omitted; SQLite is canonical |
 | Wrapper packaging (Go/PyPI/npm/Chocolatey/AUR) | P3 | See `packaging/DEFERRED_CHANNELS.md` |
@@ -145,8 +146,8 @@ These are **not done** and should not be inferred from MVP completion:
 
 A new agent should treat these as blockers before claiming equivalence with the reference C implementation:
 
-1. Regex/heuristic graph passes (imports, inheritance, most CALLS).
+1. Regex/heuristic graph passes remain for imports, inheritance, and unsupported languages (CALLS AST covers Rust/Py/JS/TS/Go/Java/C/C++).
 2. Community detection is connected-components, not modularity optimization.
 3. HTTP routes are pattern-limited; no `HTTP_CALLS`.
-4. Store lacks bulk-index transaction staging.
+4. No Hybrid LSP type resolution (C reference has 9 language families).
 5. FoundationDB and reference C foundation layer omitted by design.

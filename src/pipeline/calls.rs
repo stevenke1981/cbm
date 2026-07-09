@@ -1,9 +1,99 @@
+//! CALLS edge resolution — registry, AST resolvers, regex fallback.
+//!
+//! Dispatch order (DeusData-style):
+//! 1. Language-specific [`AstCallResolver`] when tree-sitter parse succeeds
+//! 2. Regex fallback for unsupported languages or parse failures
+
 use crate::store::{Edge, Symbol};
 use std::collections::HashMap;
+
+/// Trait for CALLS resolution strategies (OOP extension point).
+pub trait CallResolver: Send + Sync {
+    fn name(&self) -> &'static str;
+    fn resolve(
+        &self,
+        symbols: &[Symbol],
+        content: &str,
+        language: &str,
+        registry: &HashMap<String, Vec<String>>,
+    ) -> Option<Vec<Edge>>;
+}
+
+/// Tree-sitter AST strategy covering Rust, Python, JS/TS, Go, Java, C, C++.
+pub struct AstCallStrategy;
+
+impl CallResolver for AstCallStrategy {
+    fn name(&self) -> &'static str {
+        "ast"
+    }
+
+    fn resolve(
+        &self,
+        symbols: &[Symbol],
+        content: &str,
+        language: &str,
+        registry: &HashMap<String, Vec<String>>,
+    ) -> Option<Vec<Edge>> {
+        let resolver = super::calls_ast::AstCallResolver::for_language(language)?;
+        resolver.try_resolve(symbols, content, registry)
+    }
+}
+
+/// Line-based regex strategy (heuristic fallback).
+pub struct RegexCallStrategy;
+
+impl CallResolver for RegexCallStrategy {
+    fn name(&self) -> &'static str {
+        "regex"
+    }
+
+    fn resolve(
+        &self,
+        symbols: &[Symbol],
+        content: &str,
+        _language: &str,
+        registry: &HashMap<String, Vec<String>>,
+    ) -> Option<Vec<Edge>> {
+        Some(resolve_calls_inner(symbols, content, registry))
+    }
+}
+
+/// Composite resolver: try strategies in order until one returns `Some`.
+pub struct CallResolutionPipeline {
+    strategies: Vec<Box<dyn CallResolver>>,
+}
+
+impl Default for CallResolutionPipeline {
+    fn default() -> Self {
+        Self {
+            strategies: vec![Box::new(AstCallStrategy), Box::new(RegexCallStrategy)],
+        }
+    }
+}
+
+impl CallResolutionPipeline {
+    pub fn resolve(
+        &self,
+        symbols: &[Symbol],
+        content: &str,
+        language: &str,
+        registry: &HashMap<String, Vec<String>>,
+    ) -> Vec<Edge> {
+        for strategy in &self.strategies {
+            if let Some(edges) = strategy.resolve(symbols, content, language, registry) {
+                return edges;
+            }
+        }
+        Vec::new()
+    }
+}
 
 pub fn build_name_registry(symbols: &[Symbol]) -> HashMap<String, Vec<String>> {
     let mut name_to_qn: HashMap<String, Vec<String>> = HashMap::new();
     for sym in symbols {
+        if !matches!(sym.label.as_str(), "Function" | "Method") {
+            continue;
+        }
         name_to_qn
             .entry(sym.name.clone())
             .or_default()
@@ -19,19 +109,13 @@ pub fn resolve_calls_with_registry(
     language: &str,
     registry: &HashMap<String, Vec<String>>,
 ) -> Vec<Edge> {
-    if language == "rust" {
-        let ast_edges = super::calls_ast::resolve_calls_rust_ast(symbols, content, registry);
-        if !ast_edges.is_empty() {
-            return ast_edges;
-        }
-    }
-    resolve_calls_inner(symbols, content, registry)
+    CallResolutionPipeline::default().resolve(symbols, content, language, registry)
 }
 
 /// Resolve CALLS edges from symbol definitions using name matching within file scope.
-pub fn resolve_calls(symbols: &[Symbol], content: &str, _language: &str) -> Vec<Edge> {
+pub fn resolve_calls(symbols: &[Symbol], content: &str, language: &str) -> Vec<Edge> {
     let registry = build_name_registry(symbols);
-    resolve_calls_inner(symbols, content, &registry)
+    resolve_calls_with_registry(symbols, content, language, &registry)
 }
 
 fn resolve_calls_inner(
@@ -48,7 +132,7 @@ fn resolve_calls_inner(
     let lines: Vec<&str> = content.lines().collect();
 
     for sym in symbols {
-        if sym.label != "Function" {
+        if !matches!(sym.label.as_str(), "Function" | "Method") {
             continue;
         }
         let start = sym.line_start.saturating_sub(1) as usize;
@@ -75,6 +159,7 @@ fn resolve_calls_inner(
                                 | "new"
                                 | "self"
                                 | "super"
+                                | "this"
                                 | "print"
                                 | "println"
                                 | "format"
@@ -167,6 +252,10 @@ mod tests {
         assert_eq!(edges.len(), 1);
         assert_eq!(edges[0].src_qn, qn("a.rs", "Function", "main", 1));
         assert_eq!(edges[0].dst_qn, qn("a.rs", "Function", "helper", 7));
+        assert!(edges[0]
+            .properties_json
+            .as_ref()
+            .is_some_and(|p| p.contains("ast")));
     }
 
     #[test]
@@ -210,5 +299,38 @@ mod tests {
             edges.is_empty(),
             "ambiguous cross-file callee should not link"
         );
+    }
+
+    #[test]
+    fn python_uses_ast_strategy() {
+        let symbols = vec![
+            Symbol {
+                qualified_name: qn("a.py", "Function", "helper", 1),
+                name: "helper".into(),
+                label: "Function".into(),
+                file_path: "a.py".into(),
+                line_start: 1,
+                line_end: 2,
+                signature: None,
+                properties_json: None,
+            },
+            Symbol {
+                qualified_name: qn("a.py", "Function", "main", 4),
+                name: "main".into(),
+                label: "Function".into(),
+                file_path: "a.py".into(),
+                line_start: 4,
+                line_end: 5,
+                signature: None,
+                properties_json: None,
+            },
+        ];
+        let src = "def helper():\n    pass\n\ndef main():\n    helper()\n";
+        let edges = resolve_calls(&symbols, src, "python");
+        assert_eq!(edges.len(), 1);
+        assert!(edges[0]
+            .properties_json
+            .as_ref()
+            .is_some_and(|p| p.contains("\"method\":\"ast\"")));
     }
 }

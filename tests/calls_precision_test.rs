@@ -85,10 +85,10 @@ fn ambiguous_cross_file_call_stays_empty() {
 }
 
 #[test]
-fn regex_fallback_marks_method_metadata() {
+fn python_ast_marks_method_metadata() {
     let symbols = vec![
-        function_sym("a.py", "main", 1, 4),
-        function_sym("a.py", "helper", 6, 8),
+        function_sym("a.py", "main", 1, 2),
+        function_sym("a.py", "helper", 4, 5),
     ];
     let src = "def main():\n    helper()\n\ndef helper():\n    pass\n";
     let registry = build_name_registry(&symbols);
@@ -98,7 +98,27 @@ fn regex_fallback_marks_method_metadata() {
         edges[0]
             .properties_json
             .as_ref()
+            .is_some_and(|p| p.contains("ast")),
+        "expected AST method metadata for Python"
+    );
+}
+
+#[test]
+fn unsupported_language_uses_regex_fallback() {
+    let symbols = vec![
+        function_sym("a.rb", "main", 1, 2),
+        function_sym("a.rb", "helper", 4, 5),
+    ];
+    // No Ruby grammar — regex path must still resolve same-file calls.
+    let src = "def main\n  helper()\nend\ndef helper\nend\n";
+    let registry = build_name_registry(&symbols);
+    let edges = resolve_calls_with_registry(&symbols[..1], src, "ruby", &registry);
+    assert_eq!(edges.len(), 1);
+    assert!(
+        edges[0]
+            .properties_json
+            .as_ref()
             .is_some_and(|p| p.contains("regex")),
-        "expected regex method metadata"
+        "expected regex fallback for unsupported language"
     );
 }

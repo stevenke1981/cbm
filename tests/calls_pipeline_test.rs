@@ -47,8 +47,8 @@ fn python_pipeline_resolves_local_call() {
     assert!(
         edge.properties_json
             .as_ref()
-            .is_some_and(|p| p.contains("regex")),
-        "expected regex method metadata"
+            .is_some_and(|p| p.contains("ast")),
+        "expected AST method metadata for Python"
     );
 
     let _ = cbm::store::delete_project_db(&index.project);
@@ -68,6 +68,75 @@ fn javascript_pipeline_resolves_local_call() {
     let index = pipeline.run(dir.path(), Some("js-calls")).unwrap();
     let store = Store::open(&index.project).unwrap();
     assert!(has_call(&store, "main.js", "main", "helper"));
+
+    let edge = calls_edges(&store)
+        .into_iter()
+        .find(|e| e.dst_qn.contains("helper"))
+        .expect("CALLS edge");
+    assert!(
+        edge.properties_json
+            .as_ref()
+            .is_some_and(|p| p.contains("ast")),
+        "expected AST method metadata for JavaScript"
+    );
+
+    let _ = cbm::store::delete_project_db(&index.project);
+}
+
+#[test]
+fn go_pipeline_resolves_call_with_ast_metadata() {
+    let (_guard, _cache, _) = isolated_cache();
+    let dir = TempDir::new().unwrap();
+    std::fs::write(
+        dir.path().join("main.go"),
+        "package main\nfunc helper() {}\nfunc main() { helper() }\n",
+    )
+    .unwrap();
+
+    let pipeline = Pipeline::new(IndexMode::Full);
+    let index = pipeline.run(dir.path(), Some("go-calls")).unwrap();
+    let store = Store::open(&index.project).unwrap();
+    assert!(has_call(&store, "main.go", "main", "helper"));
+
+    let edge = calls_edges(&store)
+        .into_iter()
+        .find(|e| e.dst_qn.contains("helper"))
+        .expect("CALLS edge");
+    assert!(
+        edge.properties_json
+            .as_ref()
+            .is_some_and(|p| p.contains("ast")),
+        "expected AST method metadata for Go"
+    );
+
+    let _ = cbm::store::delete_project_db(&index.project);
+}
+
+#[test]
+fn java_pipeline_resolves_call_with_ast_metadata() {
+    let (_guard, _cache, _) = isolated_cache();
+    let dir = TempDir::new().unwrap();
+    std::fs::write(
+        dir.path().join("App.java"),
+        "class App {\n  void helper() {}\n  void main() { helper(); }\n}\n",
+    )
+    .unwrap();
+
+    let pipeline = Pipeline::new(IndexMode::Full);
+    let index = pipeline.run(dir.path(), Some("java-calls")).unwrap();
+    let store = Store::open(&index.project).unwrap();
+    assert!(has_call(&store, "App.java", "main", "helper"));
+
+    let edge = calls_edges(&store)
+        .into_iter()
+        .find(|e| e.dst_qn.contains("helper"))
+        .expect("CALLS edge");
+    assert!(
+        edge.properties_json
+            .as_ref()
+            .is_some_and(|p| p.contains("ast")),
+        "expected AST method metadata for Java"
+    );
 
     let _ = cbm::store::delete_project_db(&index.project);
 }
