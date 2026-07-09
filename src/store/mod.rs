@@ -1,7 +1,9 @@
 mod codec;
+mod pool;
 mod schema;
 mod types;
 
+pub use pool::StorePool;
 pub use schema::*;
 pub use types::*;
 
@@ -10,6 +12,9 @@ use crate::project::project_db_path;
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 use std::collections::{HashMap, HashSet, VecDeque};
 
+/// SQLite-backed knowledge graph for one project.
+///
+/// Open via [`Store::open`] or the process-local [`StorePool`] for MCP reuse.
 pub struct Store {
     conn: Connection,
     project: String,
@@ -752,35 +757,10 @@ impl Store {
             ..Default::default()
         })?;
 
-        let all_symbols = self.list_symbols()?;
-        let mut community_counts: HashMap<u32, (usize, Vec<String>)> = HashMap::new();
-        for sym in &all_symbols {
-            let Some(props) = sym.properties_json.as_ref() else {
-                continue;
-            };
-            let Ok(v) = serde_json::from_str::<serde_json::Value>(props) else {
-                continue;
-            };
-            let Some(id) = v.get("community_id").and_then(|x| x.as_u64()) else {
-                continue;
-            };
-            let entry = community_counts.entry(id as u32).or_insert((0, Vec::new()));
-            entry.0 += 1;
-            if entry.1.len() < 5 {
-                entry.1.push(sym.qualified_name.clone());
-            }
-        }
-        let community_count = community_counts.len();
-        let mut top_communities: Vec<CommunitySummary> = community_counts
-            .into_iter()
-            .map(|(id, (symbol_count, sample_symbols))| CommunitySummary {
-                id,
-                symbol_count,
-                sample_symbols,
-            })
-            .collect();
-        top_communities.sort_by_key(|b| std::cmp::Reverse(b.symbol_count));
-        top_communities.truncate(10);
+        // Prefer meta written by CommunitiesPass (O(1)); fall back to scan.
+        let (community_count, top_communities) = self.community_summary_from_meta()?.unwrap_or_else(
+            || self.community_summary_from_symbols().unwrap_or((0, vec![])),
+        );
 
         Ok(ArchitectureSummary {
             project: self.project.clone(),
@@ -818,6 +798,83 @@ impl Store {
             vector_count,
             semantic_enabled,
         })
+    }
+
+    /// Read compact community summary written during indexing (`community_samples` meta).
+    /// Returns `None` when meta is missing so callers can fall back to a symbol scan.
+    fn community_summary_from_meta(
+        &self,
+    ) -> Result<Option<(usize, Vec<CommunitySummary>)>> {
+        let count_meta = self.get_meta("community_count")?;
+        let samples_meta = self.get_meta("community_samples")?;
+        // Legacy DBs only have community_count / properties_json — fall back to scan.
+        if count_meta.is_none() && samples_meta.is_none() {
+            return Ok(None);
+        }
+        let count = count_meta
+            .as_deref()
+            .and_then(|s| s.parse::<usize>().ok())
+            .unwrap_or(0);
+        let raw = samples_meta.unwrap_or_default();
+        if raw.is_empty() {
+            return Ok(Some((count, vec![])));
+        }
+        let mut top = Vec::new();
+        for part in raw.split(';').filter(|p| !p.is_empty()) {
+            // format: id:count:qn1,qn2,...
+            let mut segs = part.splitn(3, ':');
+            let Some(id_s) = segs.next() else { continue };
+            let Some(count_s) = segs.next() else { continue };
+            let samples = segs.next().unwrap_or("");
+            let Ok(id) = id_s.parse::<u32>() else { continue };
+            let Ok(symbol_count) = count_s.parse::<usize>() else {
+                continue;
+            };
+            let sample_symbols = if samples.is_empty() {
+                vec![]
+            } else {
+                samples.split(',').map(str::to_string).collect()
+            };
+            top.push(CommunitySummary {
+                id,
+                symbol_count,
+                sample_symbols,
+            });
+        }
+        Ok(Some((count, top)))
+    }
+
+    fn community_summary_from_symbols(&self) -> Result<(usize, Vec<CommunitySummary>)> {
+        let all_symbols = self.list_symbols()?;
+        let mut community_counts: HashMap<u32, (usize, Vec<String>)> = HashMap::new();
+        for sym in &all_symbols {
+            let Some(props) = sym.properties_json.as_ref() else {
+                continue;
+            };
+            let Ok(v) = serde_json::from_str::<serde_json::Value>(props) else {
+                continue;
+            };
+            let Some(id) = v.get("community_id").and_then(|x| x.as_u64()) else {
+                continue;
+            };
+            let entry = community_counts.entry(id as u32).or_insert((0, Vec::new()));
+            entry.0 += 1;
+            if entry.1.len() < 5 {
+                entry.1.push(sym.qualified_name.clone());
+            }
+        }
+        let community_count = community_counts.len();
+        let mut top_communities: Vec<CommunitySummary> = community_counts
+            .into_iter()
+            .map(|(id, (symbol_count, sample_symbols))| CommunitySummary {
+                id,
+                symbol_count,
+                sample_symbols,
+            })
+            .collect();
+        top_communities.sort_by_key(|b| std::cmp::Reverse(b.symbol_count));
+        top_communities.truncate(10);
+        Ok((community_count, top_communities))
     }
 
     pub fn get_adr(&self) -> Result<Option<String>> {

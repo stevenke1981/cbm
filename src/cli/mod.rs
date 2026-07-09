@@ -39,8 +39,9 @@ RLM WORKFLOW:
     Phase 2: rlm_read_symbol (one per call)
     Phase 3: get_architecture / rlm_workflow phase=reduce
 
-COMPATIBLE AGENTS:
-    OpenCode, Codex, Claude Code, Gemini CLI, Zed, Aider
+COMPATIBLE AGENTS (aligned with DeusData/codebase-memory-mcp):
+    Claude Code, Codex, Gemini CLI, Zed, OpenCode, Antigravity,
+    Aider, KiloCode, VS Code, OpenClaw, Kiro
 "#
     );
 }

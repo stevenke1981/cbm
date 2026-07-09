@@ -2,9 +2,10 @@
 
 Status key: **Done** | **Partial** | **MVP** | **Not started** | **Omitted**
 
-Reference: `knowledge-graph/` (architecture, specifications, functions).
+Primary reference: [DeusData/codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp) (C engine).
+Secondary notes: local `knowledge-graph/` architecture docs when present.
 
-Last updated: 2026-06-12 (Section 7 review applied).
+Last updated: 2026-07-09 (OOP pass pipeline + StorePool alignment).
 
 ## Status model
 
@@ -19,19 +20,23 @@ Last updated: 2026-06-12 (Section 7 review applied).
 
 ## Core platform
 
-| Feature | Reference | Rust (`CBM`) | Status |
+| Feature | Reference (DeusData C) | Rust (`CBM`) | Status |
 |---------|-----------|----------------|--------|
 | MCP stdio server | Yes | Yes | Done |
-| CLI tool dispatch | Yes | Yes (`CBM cli --json --quiet`) | Done |
-| Agent install/uninstall | Yes | Yes (OpenCode, Codex, Claude, …) | Done |
+| CLI tool dispatch | Yes | Yes (`cbm cli --json --quiet`) | Done |
+| Agent install/uninstall | 11 agents | Yes (Claude, Codex, Gemini, OpenCode, Zed, Aider, Antigravity, KiloCode, Kiro, …) | Partial |
 | Hooks (augment, session-start) | Yes | Yes | Done |
+| Multi-pass pipeline (`IndexPass`) | Yes (registry of passes) | Yes (`pipeline/pass.rs` trait + default sequence) | Done |
+| Idle store connection cache | Yes | Yes (`StorePool`) | Done |
 | SQLite graph store | Yes | Yes | Done |
 | Compressed artifact persistence | Yes | Yes (`.codebase-memory/graph.db.zst`) | Done |
-| Project naming (`CBM+` prefix) | Yes | Yes (path hash slug) | Done |
-| HTTP graph UI | Yes | Yes (search, node details, edge filters) | MVP |
+| Project naming (`cbm+` prefix) | Yes | Yes (path hash slug) | Done |
+| HTTP graph UI | Yes (3D) | Yes (search, node details, edge filters) | MVP |
 | Watcher / auto-reindex | Yes | Yes (backoff + dirty signature) | Done |
 | Graceful shutdown / cancel | Yes | Ctrl+C stops watcher/HTTP | MVP |
-| FoundationDB backend | Yes | — | Omitted (SQLite only) |
+| Hybrid LSP type resolution | 9 language families | — | Not started |
+| 158 tree-sitter languages | Yes | 8 (Rust, Py, JS/TS, Go, Java, C, C++) | Partial |
+| FoundationDB backend | No (SQLite) | — | Omitted (SQLite only) |
 
 ## Indexing pipeline (heuristic passes marked)
 

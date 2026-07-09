@@ -5,20 +5,31 @@ use crate::pipeline::Pipeline;
 use crate::project::normalize_project_name;
 use crate::rlm::RlmEngine;
 use crate::semantic;
-use crate::store::{delete_project_db, SearchFilter, Store};
+use crate::store::{delete_project_db, SearchFilter, Store, StorePool};
 use crate::watcher::Watcher;
 use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::sync::Arc;
 
+/// Dispatches MCP tool calls. Uses [`StorePool`] so repeated queries on the same
+/// project reuse one SQLite connection (DeusData-style idle store cache).
 pub struct ToolHandler {
     rlm: Arc<RlmEngine>,
     watcher: Option<Arc<Watcher>>,
+    pool: &'static StorePool,
 }
 
 impl ToolHandler {
     pub fn new(rlm: Arc<RlmEngine>, watcher: Option<Arc<Watcher>>) -> Self {
-        Self { rlm, watcher }
+        Self {
+            rlm,
+            watcher,
+            pool: StorePool::global(),
+        }
+    }
+
+    fn with_store<R>(&self, project: &str, f: impl FnOnce(&Store) -> Result<R>) -> Result<R> {
+        self.pool.with(project, f)
     }
 
     pub fn handle(&self, name: &str, args: &Value) -> Result<Value> {
@@ -86,6 +97,8 @@ impl ToolHandler {
         };
 
         let project_name = &result.project;
+        // Reindex rewrites the DB — drop any cached connection.
+        self.pool.invalidate(project_name);
         if let Some(w) = &self.watcher {
             w.register(
                 project_name,
@@ -98,7 +111,6 @@ impl ToolHandler {
 
     fn search_graph(&self, args: &Value) -> Result<Value> {
         let project = normalize_project_name(Self::require_str(args, "project")?);
-        let store = Store::open(&project)?;
 
         if let Some(vector_query) = args
             .get("vector_query")
@@ -106,13 +118,17 @@ impl ToolHandler {
             .and_then(|v| v.as_str())
         {
             let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(20) as usize;
-            let result = semantic::vector_search(&store, vector_query, limit)?;
-            return Ok(serde_json::to_value(result)?);
+            return self.with_store(&project, |store| {
+                let result = semantic::vector_search(store, vector_query, limit)?;
+                Ok(serde_json::to_value(result)?)
+            });
         }
 
         let filter = parse_search_filter(args);
-        let result = store.search(&filter)?;
-        Ok(serde_json::to_value(result)?)
+        self.with_store(&project, |store| {
+            let result = store.search(&filter)?;
+            Ok(serde_json::to_value(result)?)
+        })
     }
 
     fn rlm_filter(&self, args: &Value) -> Result<Value> {
@@ -129,9 +145,10 @@ impl ToolHandler {
             .and_then(|v| v.as_str())
             .unwrap_or("both");
         let depth = args.get("depth").and_then(|v| v.as_u64()).unwrap_or(3) as usize;
-        let store = Store::open(&project)?;
-        let result = store.trace_path(function_name, direction, depth)?;
-        Ok(serde_json::to_value(result)?)
+        self.with_store(&project, |store| {
+            let result = store.trace_path(function_name, direction, depth)?;
+            Ok(serde_json::to_value(result)?)
+        })
     }
 
     fn get_code_snippet(&self, args: &Value) -> Result<Value> {
@@ -141,13 +158,13 @@ impl ToolHandler {
             .map(normalize_project_name)
             .unwrap_or_default();
         let qn = Self::require_str(args, "qualified_name")?;
-        let store = if project.is_empty() {
-            find_symbol_any_project(qn)?
-        } else {
-            Store::open(&project)?
-        };
-        let snippet = store.get_snippet(qn)?;
-        Ok(serde_json::to_value(snippet)?)
+        if project.is_empty() {
+            return find_symbol_any_project(qn);
+        }
+        self.with_store(&project, |store| {
+            let snippet = store.get_snippet(qn)?;
+            Ok(serde_json::to_value(snippet)?)
+        })
     }
 
     fn rlm_read_symbol(&self, args: &Value) -> Result<Value> {
@@ -158,9 +175,10 @@ impl ToolHandler {
 
     fn get_architecture(&self, args: &Value) -> Result<Value> {
         let project = normalize_project_name(Self::require_str(args, "project")?);
-        let store = Store::open(&project)?;
-        let arch = store.get_architecture()?;
-        Ok(serde_json::to_value(arch)?)
+        self.with_store(&project, |store| {
+            let arch = store.get_architecture()?;
+            Ok(serde_json::to_value(arch)?)
+        })
     }
 
     fn search_code(&self, args: &Value) -> Result<Value> {
@@ -171,9 +189,10 @@ impl ToolHandler {
             .or_else(|| args.get("query").and_then(|v| v.as_str()))
             .unwrap_or("");
         let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(20) as usize;
-        let store = Store::open(&project)?;
-        let matches = store.search_code(pattern, limit)?;
-        Ok(json!({ "matches": matches }))
+        self.with_store(&project, |store| {
+            let matches = store.search_code(pattern, limit)?;
+            Ok(json!({ "matches": matches }))
+        })
     }
 
     fn list_projects(&self) -> Result<Value> {
@@ -183,6 +202,7 @@ impl ToolHandler {
 
     fn delete_project(&self, args: &Value) -> Result<Value> {
         let project = normalize_project_name(Self::require_str(args, "project")?);
+        self.pool.invalidate(&project);
         if let Ok(store) = Store::open(&project) {
             store.delete_project()?;
         }
@@ -192,9 +212,10 @@ impl ToolHandler {
 
     fn index_status(&self, args: &Value) -> Result<Value> {
         let project = normalize_project_name(Self::require_str(args, "project")?);
-        let store = Store::open(&project)?;
-        let status = store.index_status()?;
-        let mut value = serde_json::to_value(status)?;
+        let mut value = self.with_store(&project, |store| {
+            let status = store.index_status()?;
+            Ok(serde_json::to_value(status)?)
+        })?;
         if let Some(watcher) = &self.watcher {
             let projects = watcher.project_status();
             if let Some(w) = projects.iter().find(|p| p.project == project) {
@@ -212,20 +233,25 @@ impl ToolHandler {
             .get("project")
             .and_then(|v| v.as_str())
             .map(normalize_project_name);
-        let store = match project {
-            Some(p) => Store::open(&p)?,
-            None => Store::open_memory()?,
-        };
-        let result = store.query_select(query)?;
-        Ok(serde_json::to_value(result)?)
+        match project {
+            Some(p) => self.with_store(&p, |store| {
+                let result = store.query_select(query)?;
+                Ok(serde_json::to_value(result)?)
+            }),
+            None => {
+                let result = Store::open_memory()?.query_select(query)?;
+                Ok(serde_json::to_value(result)?)
+            }
+        }
     }
 
     fn detect_changes(&self, args: &Value) -> Result<Value> {
         let project = normalize_project_name(Self::require_str(args, "project")?);
-        let store = Store::open(&project)?;
-        let info = store.get_project()?;
-        let repo = PathBuf::from(&info.repo_path);
-        let indexed_head = store.get_meta("git_head")?;
+        let (repo, indexed_head) = self.with_store(&project, |store| {
+            let info = store.get_project()?;
+            let indexed_head = store.get_meta("git_head")?;
+            Ok((PathBuf::from(&info.repo_path), indexed_head))
+        })?;
 
         match git::status(&repo) {
             Ok(st) => Ok(json!({
@@ -248,7 +274,7 @@ impl ToolHandler {
 
     fn ingest_traces(&self, args: &Value) -> Result<Value> {
         let project = normalize_project_name(Self::require_str(args, "project")?);
-        let store = Store::open(&project)?;
+        self.pool.invalidate(&project);
         let traces = args
             .get("traces")
             .and_then(|v| v.as_array())
@@ -271,33 +297,36 @@ impl ToolHandler {
             }
         }
 
-        let ingested = store.ingest_traces(&pairs)?;
-        Ok(json!({
-            "success": true,
-            "project": project,
-            "ingested": ingested,
-            "edge_type": "RUNTIME_TRACE"
-        }))
+        self.with_store(&project, |store| {
+            let ingested = store.ingest_traces(&pairs)?;
+            Ok(json!({
+                "success": true,
+                "project": project,
+                "ingested": ingested,
+                "edge_type": "RUNTIME_TRACE"
+            }))
+        })
     }
 
     fn manage_adr(&self, args: &Value) -> Result<Value> {
         let project = normalize_project_name(Self::require_str(args, "project")?);
         let action = args.get("action").and_then(|v| v.as_str()).unwrap_or("get");
-        let store = Store::open(&project)?;
         match action {
             "set" => {
                 let content = Self::require_str(args, "content")?;
-                store.set_adr(content)?;
-                Ok(json!({ "action": "set", "length": content.len() }))
+                self.with_store(&project, |store| {
+                    store.set_adr(content)?;
+                    Ok(json!({ "action": "set", "length": content.len() }))
+                })
             }
-            "delete" => {
+            "delete" => self.with_store(&project, |store| {
                 store.set_meta("adr", "")?;
                 Ok(json!({ "action": "delete" }))
-            }
-            _ => {
+            }),
+            _ => self.with_store(&project, |store| {
                 let adr = store.get_adr()?;
                 Ok(json!({ "action": "get", "content": adr }))
-            }
+            }),
         }
     }
 
@@ -376,11 +405,18 @@ fn parse_search_filter(args: &Value) -> SearchFilter {
     }
 }
 
-fn find_symbol_any_project(qn: &str) -> Result<Store> {
+fn find_symbol_any_project(qn: &str) -> Result<Value> {
     for project in Store::list_projects()? {
-        let store = Store::open(&project.name)?;
-        if store.find_symbol(qn)?.is_some() {
-            return Ok(store);
+        let found = StorePool::global().with(&project.name, |store| {
+            if store.find_symbol(qn)?.is_some() {
+                let snippet = store.get_snippet(qn)?;
+                Ok(Some(serde_json::to_value(snippet)?))
+            } else {
+                Ok(None)
+            }
+        })?;
+        if let Some(v) = found {
+            return Ok(v);
         }
     }
     Err(Error::SymbolNotFound(qn.to_string()))

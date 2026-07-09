@@ -2,9 +2,9 @@
 
 CBM is a Rust MCP server and CLI for indexing codebases into a local knowledge graph for AI coding agents. It is designed for OpenCode, Codex, Claude Code, and other MCP-capable developer tools.
 
-This repository is a Rust MVP rewrite of `cbrlm-mcp` (now CBM). It is usable for agent workflows today, but it is not a full reference replica. SQLite is the canonical store; FoundationDB is intentionally omitted.
+This repository is a **Rust implementation** aligned with the tool surface and pipeline architecture of [DeusData/codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp) (pure C reference). SQLite is the canonical store; FoundationDB is intentionally omitted. Full language/LSP parity with the C engine is not claimed — see [`PARITY_MATRIX.md`](PARITY_MATRIX.md).
 
-Reference material: [`../knowledge-graph/`](../knowledge-graph/)
+**Upstream alignment targets:** multi-pass indexing (`structure` → `imports` → `calls` → `routes` → `inheritance` → `semantic` → `communities`), MCP tool names, project naming (`cbm+` prefix), modes (`full` / `moderate` / `fast`), idle store connection cache, and agent install hooks.
 
 Implementation history: [`RUST_REWRITE_TODO.md`](RUST_REWRITE_TODO.md)
 

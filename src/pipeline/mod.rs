@@ -4,6 +4,7 @@ mod communities;
 mod extract;
 mod imports;
 mod inheritance;
+mod pass;
 mod routes;
 mod structure;
 
@@ -12,6 +13,10 @@ pub use communities::*;
 pub use extract::*;
 pub use imports::*;
 pub use inheritance::*;
+pub use pass::{
+    default_passes, run_passes, CallsPass, CommunitiesPass, ImportsPass, IndexPass,
+    InheritancePass, PassContext, PassOutcome, RoutesPass, SemanticPass, StructurePass,
+};
 pub use routes::*;
 pub use structure::*;
 
@@ -21,7 +26,7 @@ use crate::git;
 use crate::persistence;
 use crate::project::{normalize_project_name, project_name_from_path};
 use crate::semantic;
-use crate::store::{Edge, SourceFile, Store, Symbol};
+use crate::store::{SourceFile, Store, Symbol};
 use rayon::prelude::*;
 use std::collections::HashMap;
 use std::path::Path;
@@ -362,108 +367,16 @@ fn finalize_index(
         .into_iter()
         .filter(|s| !matches!(s.label.as_str(), "Project" | "Folder" | "File" | "Module"))
         .collect();
-    let file_paths: Vec<String> = store.list_files()?.into_iter().map(|f| f.path).collect();
-    let symbol_qns: Vec<String> = code_symbols
-        .iter()
-        .map(|s| s.qualified_name.clone())
-        .collect();
 
-    store.delete_symbols_by_labels(&["Project", "Folder", "File", "Module"])?;
-    let (struct_symbols, struct_edges) = build_structure_graph(
-        project_name,
-        repo_path.to_string_lossy().as_ref(),
-        &file_paths,
-        &symbol_qns,
-    );
-    store.upsert_symbols_batch(&struct_symbols)?;
+    let mut ctx = PassContext::new(store, repo_path, project_name, mode, code_symbols);
+    let passes = default_passes();
+    let refs: Vec<&dyn IndexPass> = passes.iter().map(|p| p.as_ref()).collect();
+    run_passes(&mut ctx, &refs)?;
 
-    store.delete_edges_by_type("CONTAINS")?;
-    store.insert_edges_batch(&struct_edges)?;
-
-    let mut import_edges = Vec::new();
-    for file in store.list_files()? {
-        import_edges.extend(extract_import_edges(
-            &file.path,
-            &file.language,
-            &file.content,
-        ));
-    }
-    store.delete_edges_by_type("IMPORTS")?;
-    store.insert_edges_batch(&import_edges)?;
-
-    let symbols_by_file: HashMap<String, Vec<Symbol>> =
-        code_symbols.iter().fold(HashMap::new(), |mut acc, sym| {
-            acc.entry(sym.file_path.clone())
-                .or_default()
-                .push(sym.clone());
-            acc
-        });
-
-    let call_edges = rebuild_call_edges(store, &code_symbols)?;
-    store.delete_edges_by_type("CALLS")?;
-    store.insert_edges_batch(&call_edges)?;
-
-    let mut route_edges = Vec::new();
-    for file in store.list_files()? {
-        if let Some(syms) = symbols_by_file.get(&file.path) {
-            route_edges.extend(extract_http_routes(
-                &file.path,
-                &file.language,
-                &file.content,
-                syms,
-            ));
-        }
-    }
-    store.delete_edges_by_type("HTTP_ROUTE")?;
-    store.insert_edges_batch(&route_edges)?;
-
-    let mut inheritance_edges = Vec::new();
-    for file in store.list_files()? {
-        if let Some(syms) = symbols_by_file.get(&file.path) {
-            inheritance_edges.extend(extract_inheritance_edges(
-                &file.path,
-                &file.language,
-                &file.content,
-                syms,
-            ));
-        }
-    }
-    for edge_type in ["INHERITS", "IMPLEMENTS", "DECORATES"] {
-        store.delete_edges_by_type(edge_type)?;
-    }
-    store.insert_edges_batch(&inheritance_edges)?;
-
-    let mut edge_count = struct_edges.len()
-        + import_edges.len()
-        + call_edges.len()
-        + route_edges.len()
-        + inheritance_edges.len();
-
-    let semantic = if semantic::should_run(mode) {
-        semantic::run_semantic_pass(store)?
-    } else {
-        semantic::SemanticResult {
-            vectors_stored: 0,
-            similar_edges: 0,
-            semantically_related_edges: 0,
-        }
-    };
-    edge_count += semantic.similar_edges + semantic.semantically_related_edges;
-
-    let all_edges = store.list_edges()?;
-    let community_result = detect_communities(&code_symbols, &all_edges);
-    let mut updated_symbols = code_symbols.clone();
-    apply_community_properties(&mut updated_symbols, &community_result);
-    store.upsert_symbols_batch(&updated_symbols)?;
-    store.set_meta(
-        "community_count",
-        &community_result.community_count.to_string(),
-    )?;
-
-    Ok((edge_count, semantic))
+    Ok((ctx.edge_count, ctx.semantic))
 }
 
-fn rebuild_call_edges(store: &Store, code_symbols: &[Symbol]) -> Result<Vec<Edge>> {
+pub(crate) fn rebuild_call_edges(store: &Store, code_symbols: &[Symbol]) -> Result<Vec<crate::store::Edge>> {
     let registry = build_name_registry(code_symbols);
     let files = store.list_files()?;
     let symbols_by_file: HashMap<String, Vec<Symbol>> =
