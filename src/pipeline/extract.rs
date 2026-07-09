@@ -1,4 +1,4 @@
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::store::Symbol;
 use crate::symbol_id::qualified_name;
 use streaming_iterator::StreamingIterator;
@@ -11,16 +11,20 @@ pub fn extract_symbols(file_path: &str, language: &str, content: &str) -> Result
     };
 
     let mut parser = Parser::new();
-    parser
-        .set_language(&lang)
-        .map_err(|e| Error::TreeSitter(e.to_string()))?;
+    if parser.set_language(&lang).is_err() {
+        // ABI mismatch (e.g. newer grammar vs tree-sitter core) → regex.
+        return Ok(extract_symbols_regex(file_path, language, content));
+    }
     let tree = match parser.parse(content, None) {
         Some(t) => t,
         None => return Ok(extract_symbols_regex(file_path, language, content)),
     };
 
     let (query_src, label) = query_for_language(language);
-    let query = Query::new(&lang, query_src).map_err(|e| Error::TreeSitter(e.to_string()))?;
+    // Soft-fail query compile errors so one bad grammar profile never drops the file.
+    let Ok(query) = Query::new(&lang, query_src) else {
+        return Ok(extract_symbols_regex(file_path, language, content));
+    };
     let mut cursor = QueryCursor::new();
     let mut symbols = Vec::new();
 
@@ -32,10 +36,7 @@ pub fn extract_symbols(file_path: &str, language: &str, content: &str) -> Result
             let capture_name = query.capture_names()[capture.index as usize];
             let n = capture.node;
             if capture_name == "name" {
-                name = n
-                    .utf8_text(content.as_bytes())
-                    .map_err(|e| Error::TreeSitter(e.to_string()))?
-                    .to_string();
+                name = n.utf8_text(content.as_bytes()).unwrap_or("").to_string();
             }
             if capture_name == "definition" {
                 node = Some(n);
@@ -77,6 +78,10 @@ fn language_for_ts(language: &str) -> Option<Language> {
         "java" => tree_sitter_java::LANGUAGE.into(),
         "c" => tree_sitter_c::LANGUAGE.into(),
         "cpp" => tree_sitter_cpp::LANGUAGE.into(),
+        "ruby" => tree_sitter_ruby::LANGUAGE.into(),
+        "csharp" => tree_sitter_c_sharp::LANGUAGE.into(),
+        "php" => tree_sitter_php::LANGUAGE_PHP.into(),
+        "shell" | "bash" => tree_sitter_bash::LANGUAGE.into(),
         _ => return None,
     })
 }
@@ -138,6 +143,37 @@ fn query_for_language(language: &str) -> (&'static str, &'static str) {
             "#,
             "Function",
         ),
+        "ruby" => (
+            r#"
+            (method name: (identifier) @name) @definition
+            (singleton_method name: (identifier) @name) @definition
+            (class name: (constant) @name) @definition
+            (module name: (constant) @name) @definition
+            "#,
+            "Function",
+        ),
+        "csharp" => (
+            // Keep queries minimal — C# grammar is large; invalid patterns skip the whole file.
+            r#"
+            (method_declaration name: (identifier) @name) @definition
+            (class_declaration name: (identifier) @name) @definition
+            "#,
+            "Function",
+        ),
+        "php" => (
+            r#"
+            (function_definition name: (name) @name) @definition
+            (method_declaration name: (name) @name) @definition
+            (class_declaration name: (name) @name) @definition
+            "#,
+            "Function",
+        ),
+        "shell" | "bash" => (
+            r#"
+            (function_definition name: (word) @name) @definition
+            "#,
+            "Function",
+        ),
         _ => (r#"(identifier) @name"#, "Function"),
     }
 }
@@ -175,7 +211,10 @@ fn label_for_kind(kind: &str) -> Option<&'static str> {
         | "function_definition"
         | "function_declaration"
         | "method_declaration"
-        | "method_definition" => "Function",
+        | "method_definition"
+        | "method"
+        | "singleton_method"
+        | "constructor_declaration" => "Function",
         "struct_item"
         | "struct_specifier"
         | "class_specifier"
@@ -184,7 +223,9 @@ fn label_for_kind(kind: &str) -> Option<&'static str> {
         | "enum_item"
         | "trait_item"
         | "impl_item"
-        | "interface_declaration" => "Class",
+        | "interface_declaration"
+        | "module"
+        | "class" => "Class",
         _ => return None,
     })
 }
@@ -225,6 +266,22 @@ fn extract_symbols_regex(file_path: &str, language: &str, content: &str) -> Vec<
                 "Function",
             ),
         ],
+        "ruby" => &[
+            (r"(?m)^\s*def\s+(\w+)", "Function"),
+            (r"(?m)^\s*class\s+(\w+)", "Class"),
+            (r"(?m)^\s*module\s+(\w+)", "Class"),
+        ],
+        "csharp" => &[
+            (r"(?m)^\s*class\s+(\w+)", "Class"),
+            (r"(?m)^\s*interface\s+(\w+)", "Class"),
+            (r"(?m)^\s*(?:public|private|protected|internal|static|\s)*void\s+(\w+)\s*\(", "Function"),
+            (r"(?m)^\s*(?:public|private|protected|internal|static|\s)*(?:int|string|bool|Task(?:<[^>]+>)?)\s+(\w+)\s*\(", "Function"),
+        ],
+        "php" => &[
+            (r"(?m)^\s*(?:public|private|protected|static|\s)*function\s+(\w+)", "Function"),
+            (r"(?m)^\s*class\s+(\w+)", "Class"),
+        ],
+        "shell" | "bash" => &[(r"(?m)^\s*(\w+)\s*\(\s*\)\s*\{", "Function")],
         _ => &[(r"(?m)^\s*(?:fn|def|func)\s+(\w+)", "Function")],
     };
 

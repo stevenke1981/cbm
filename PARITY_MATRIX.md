@@ -35,7 +35,7 @@ Last updated: 2026-07-09 (OOP pass pipeline + StorePool alignment).
 | Watcher / auto-reindex | Yes | Yes (backoff + dirty signature) | Done |
 | Graceful shutdown / cancel | Yes | Ctrl+C stops watcher/HTTP | MVP |
 | Hybrid LSP type resolution | 9 language families | — | Not started |
-| 158 tree-sitter languages | Yes | 8 (Rust, Py, JS/TS, Go, Java, C, C++) | Partial |
+| Tree-sitter languages | 158 | 12 (Rust, Py, JS/TS, Go, Java, C, C++, Ruby, C#, PHP, Bash) | Partial |
 | FoundationDB backend | No (SQLite) | — | Omitted (SQLite only) |
 
 ## Indexing pipeline (heuristic passes marked)
@@ -47,12 +47,14 @@ Last updated: 2026-07-09 (OOP pass pipeline + StorePool alignment).
 | Regex fallback extract | Yes | Yes | MVP |
 | Stable qualified names | Yes | Yes (`file::label::name@Lline`) | Done |
 | Structure nodes (Project/Folder/File) | Yes | Yes | Done |
-| Import edges | Yes | Regex per language | Partial (heuristic) |
-| CALLS edges | Yes | AST: Rust/Py/JS/TS/Go/Java/C/C++ + regex fallback | Done (supported langs) |
+| Import edges | Yes | Path-resolving `ImportResolver` + external Module | Partial |
+| CALLS edges | Yes | AST: Rust/Py/JS/TS/Go/Java/C/C++/Ruby/C#/PHP/Bash + regex | Done (supported langs) |
 | Store bulk transaction / replace edges | Yes | `bulk_index`, `replace_edges_of_type(s)` | Done |
+| `search_code` FTS5 | Yes | `files_fts` virtual table + scan fallback | Done |
 | INHERITS / IMPLEMENTS | Yes | Regex per language | Partial (heuristic) |
 | DECORATES | Yes | Attribute patterns | Partial (heuristic) |
-| HTTP route pass | Yes | `HTTP_ROUTE` Py/Express/Axum patterns | MVP (framework-limited) |
+| HTTP route pass | Yes | `HTTP_ROUTE` multi-framework patterns | Partial |
+| HTTP client→route | Yes | `HTTP_CALLS` path matching | MVP |
 | Git history / cross-repo | Yes | Git HEAD + dirty detection only | Partial |
 | Community detection | Yes | Connected-components on CALLS+IMPORTS | MVP (not Leiden/Louvain) |
 | Post-processing summaries | Yes | `get_architecture` + communities | Partial |
@@ -133,10 +135,12 @@ These are **not done** and should not be inferred from MVP completion:
 | Item | Priority | Notes |
 |------|----------|-------|
 | Leiden / Louvain communities | P2 | Replace connected-components MVP |
-| `HTTP_CALLS` pass | P2 | Client fetch/axios/reqwest edges |
-| Multi-language AST-aware CALLS | — | **Done** for Rust/Py/JS/TS/Go/Java/C/C++ (regex fallback otherwise) |
+| `HTTP_CALLS` pass | — | **Done** (path-match MVP; framework coverage limited) |
+| Import path resolution | — | **Done** for relative JS/Py/Rust mod; absolute packages still external |
+| `search_code` FTS5 | — | **Done** |
+| Multi-language AST-aware CALLS | — | **Done** for 12 language families |
 | Store bulk transaction API | — | **Done** (`bulk_index`, `replace_edges_of_type`) |
-| Tree-sitter coverage gaps | P1 | Kotlin, Ruby, … |
+| Tree-sitter coverage gaps | P2 | Kotlin, Swift, … (beyond current 12) |
 | FoundationDB backend | — | Omitted; SQLite is canonical |
 | Wrapper packaging (Go/PyPI/npm/Chocolatey/AUR) | P3 | See `packaging/DEFERRED_CHANNELS.md` |
 | Full reference UI (React graph-ui) | P3 | Lightweight HTML is deliberate MVP |

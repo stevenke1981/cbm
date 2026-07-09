@@ -130,6 +130,7 @@ pub fn color_for_edge(edge_type: &str) -> u32 {
         "IMPLEMENTS" => 0xba68c8,
         "DECORATES" => 0xf778ba,
         "HTTP_ROUTE" => 0xff8a65,
+        "HTTP_CALLS" => 0xff7043,
         "SIMILAR_TO" | "SEMANTICALLY_RELATED" => 0xbc8cff,
         _ => 0x484f58,
     }

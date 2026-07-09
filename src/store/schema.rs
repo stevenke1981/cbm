@@ -60,4 +60,13 @@ CREATE INDEX IF NOT EXISTS idx_edges_dst ON edges(project, dst_qn);
 CREATE INDEX IF NOT EXISTS idx_edges_type ON edges(project, edge_type);
 CREATE INDEX IF NOT EXISTS idx_files_project ON files(project);
 CREATE INDEX IF NOT EXISTS idx_vectors_project ON vectors(project);
+
+-- Plain-text FTS index for search_code (content stored uncompressed for matching).
+CREATE VIRTUAL TABLE IF NOT EXISTS files_fts USING fts5(
+    path,
+    content,
+    project UNINDEXED,
+    language UNINDEXED,
+    tokenize = 'unicode61'
+);
 "#;

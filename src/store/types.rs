@@ -227,6 +227,7 @@ impl GraphSchema {
                 "symbols".into(),
                 "edges".into(),
                 "files".into(),
+                "files_fts".into(),
                 "vectors".into(),
                 "projects".into(),
                 "meta".into(),

@@ -12,13 +12,15 @@ pub use calls::*;
 pub use calls_ast::{AstCallProfile, AstCallResolver};
 pub use communities::*;
 pub use extract::*;
-pub use imports::*;
+pub use imports::{extract_import_edges, ImportResolver};
 pub use inheritance::*;
 pub use pass::{
     default_passes, run_passes, CallsPass, CommunitiesPass, ImportsPass, IndexPass,
     InheritancePass, PassContext, PassOutcome, RoutesPass, SemanticPass, StructurePass,
 };
-pub use routes::*;
+pub use routes::{
+    extract_http_client_calls, extract_http_routes, link_http_calls, HttpClientCall,
+};
 pub use structure::*;
 
 use crate::discover::{discover, language_for_path, DiscoveredFile, IndexMode};

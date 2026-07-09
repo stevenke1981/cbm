@@ -5,8 +5,9 @@
 //! `IndexPass` trait and shared `PassContext`.
 
 use super::{
-    apply_community_properties, build_structure_graph, detect_communities, extract_http_routes,
-    extract_import_edges, extract_inheritance_edges, rebuild_call_edges,
+    apply_community_properties, build_structure_graph, detect_communities,
+    extract_http_client_calls, extract_http_routes, extract_inheritance_edges, link_http_calls,
+    rebuild_call_edges, ImportResolver,
 };
 use crate::discover::IndexMode;
 use crate::error::Result;
@@ -151,13 +152,12 @@ impl IndexPass for ImportsPass {
     }
 
     fn run(&self, ctx: &mut PassContext<'_>) -> Result<PassOutcome> {
+        let files = ctx.store.list_files()?;
+        let known: Vec<String> = files.iter().map(|f| f.path.clone()).collect();
+        let resolver = ImportResolver::new(known);
         let mut import_edges = Vec::new();
-        for file in ctx.store.list_files()? {
-            import_edges.extend(extract_import_edges(
-                &file.path,
-                &file.language,
-                &file.content,
-            ));
+        for file in &files {
+            import_edges.extend(resolver.extract(&file.path, &file.language, &file.content));
         }
         ctx.store
             .replace_edges_of_type("IMPORTS", &import_edges)?;
@@ -196,22 +196,38 @@ impl IndexPass for RoutesPass {
 
     fn run(&self, ctx: &mut PassContext<'_>) -> Result<PassOutcome> {
         let by_file = ctx.symbols_by_file();
+        let files = ctx.store.list_files()?;
         let mut route_edges: Vec<Edge> = Vec::new();
-        for file in ctx.store.list_files()? {
-            if let Some(syms) = by_file.get(&file.path) {
-                route_edges.extend(extract_http_routes(
-                    &file.path,
-                    &file.language,
-                    &file.content,
-                    syms,
-                ));
-            }
+        let mut client_calls = Vec::new();
+        for file in &files {
+            let syms = by_file.get(&file.path).map(|s| s.as_slice()).unwrap_or(&[]);
+            route_edges.extend(extract_http_routes(
+                &file.path,
+                &file.language,
+                &file.content,
+                syms,
+            ));
+            client_calls.extend(extract_http_client_calls(
+                &file.path,
+                &file.language,
+                &file.content,
+                syms,
+            ));
         }
+        let http_call_edges = link_http_calls(&client_calls, &route_edges);
         ctx.store
             .replace_edges_of_type("HTTP_ROUTE", &route_edges)?;
-        ctx.edge_count += route_edges.len();
+        ctx.store
+            .replace_edges_of_type("HTTP_CALLS", &http_call_edges)?;
+        let total = route_edges.len() + http_call_edges.len();
+        ctx.edge_count += total;
         Ok(PassOutcome {
-            edges_written: route_edges.len(),
+            edges_written: total,
+            notes: vec![format!(
+                "routes={} http_calls={}",
+                route_edges.len(),
+                http_call_edges.len()
+            )],
             ..Default::default()
         })
     }

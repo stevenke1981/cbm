@@ -496,3 +496,126 @@ fn store_readonly_and_integrity_check() {
 
     let _ = cbm::store::delete_project_db(&index.project);
 }
+
+#[test]
+fn resolves_relative_js_imports_to_file_nodes() {
+    let (_guard, _cache, _) = isolated_cache();
+    let dir = TempDir::new().unwrap();
+    fs::create_dir_all(dir.path().join("src/util")).unwrap();
+    fs::write(
+        dir.path().join("src/main.js"),
+        "import { helper } from './util/helper';\nfunction main() { helper(); }\n",
+    )
+    .unwrap();
+    fs::write(
+        dir.path().join("src/util/helper.js"),
+        "export function helper() { return 1; }\n",
+    )
+    .unwrap();
+
+    let pipeline = Pipeline::new(IndexMode::Full);
+    let index = pipeline.run(dir.path(), Some("import-resolve")).unwrap();
+    let store = Store::open(&index.project).unwrap();
+    let edges = store.list_edges().unwrap();
+    assert!(
+        edges.iter().any(|e| {
+            e.edge_type == "IMPORTS"
+                && e.src_qn.contains("src/main.js")
+                && e.dst_qn.contains("src/util/helper.js::File::")
+        }),
+        "expected resolved IMPORTS edge: {edges:?}"
+    );
+
+    let _ = cbm::store::delete_project_db(&index.project);
+}
+
+#[test]
+fn search_code_finds_via_fts() {
+    let (_guard, _cache, _) = isolated_cache();
+    let dir = TempDir::new().unwrap();
+    fs::write(
+        dir.path().join("app.rs"),
+        "fn main() {\n    let unique_token_xyz = 42;\n}\n",
+    )
+    .unwrap();
+
+    let pipeline = Pipeline::new(IndexMode::Full);
+    let index = pipeline.run(dir.path(), Some("fts-search")).unwrap();
+    let store = Store::open(&index.project).unwrap();
+    let hits = store.search_code("unique_token_xyz", 10).unwrap();
+    assert!(!hits.is_empty(), "FTS search should find token");
+    assert!(hits[0].path.contains("app.rs"));
+    assert!(hits[0].preview.contains("unique_token_xyz"));
+
+    let _ = cbm::store::delete_project_db(&index.project);
+}
+
+#[test]
+fn emits_http_calls_linking_client_to_route() {
+    let (_guard, _cache, _) = isolated_cache();
+    let dir = TempDir::new().unwrap();
+    fs::write(
+        dir.path().join("api.js"),
+        "function listUsers() {}\napp.get('/users', listUsers);\n",
+    )
+    .unwrap();
+    // Express-style: .get(path) pattern matches; handler_after_line needs function after decorator.
+    // Use python server + js client for clearer HTTP_ROUTE + HTTP_CALLS.
+    fs::write(
+        dir.path().join("server.py"),
+        "@app.get(\"/users\")\ndef list_users():\n    return []\n",
+    )
+    .unwrap();
+    fs::write(
+        dir.path().join("client.js"),
+        "function loadUsers() {\n  fetch('/users');\n}\n",
+    )
+    .unwrap();
+
+    let pipeline = Pipeline::new(IndexMode::Full);
+    let index = pipeline.run(dir.path(), Some("http-calls")).unwrap();
+    let store = Store::open(&index.project).unwrap();
+    assert!(
+        store.count_edges_by_type("HTTP_ROUTE").unwrap() >= 1,
+        "expected HTTP_ROUTE"
+    );
+    assert!(
+        store.count_edges_by_type("HTTP_CALLS").unwrap() >= 1,
+        "expected HTTP_CALLS linking client to route"
+    );
+
+    let _ = cbm::store::delete_project_db(&index.project);
+}
+
+#[test]
+fn indexes_ruby_and_csharp_symbols() {
+    let (_guard, _cache, _) = isolated_cache();
+    let dir = TempDir::new().unwrap();
+    fs::write(
+        dir.path().join("app.rb"),
+        "class Greeter\n  def hello\n    world\n  end\n  def world\n  end\nend\n",
+    )
+    .unwrap();
+    fs::write(
+        dir.path().join("App.cs"),
+        "class App {\n  void Helper() {}\n  void Main() { Helper(); }\n}\n",
+    )
+    .unwrap();
+
+    let pipeline = Pipeline::new(IndexMode::Full);
+    let index = pipeline.run(dir.path(), Some("extra-langs")).unwrap();
+    let store = Store::open(&index.project).unwrap();
+    let symbols = store.list_symbols().unwrap();
+    assert!(
+        symbols.iter().any(|s| s.file_path.ends_with(".rb") && s.name == "hello"),
+        "ruby method missing: {symbols:?}"
+    );
+    assert!(
+        symbols
+            .iter()
+            .any(|s| s.file_path.ends_with(".cs") && (s.name == "Main" || s.name == "Helper")),
+        "csharp methods missing: {symbols:?}"
+    );
+
+    let _ = cbm::store::delete_project_db(&index.project);
+}

@@ -27,6 +27,8 @@ impl AstCallProfile {
                 || (p.language_id == "javascript" && matches!(language, "jsx"))
                 || (p.language_id == "typescript" && matches!(language, "tsx"))
                 || (p.language_id == "cpp" && matches!(language, "c" | "cc" | "cxx"))
+                || (p.language_id == "shell" && matches!(language, "bash"))
+                || (p.language_id == "csharp" && matches!(language, "c_sharp" | "cs"))
         })
     }
 }
@@ -54,6 +56,18 @@ fn lang_c() -> Language {
 }
 fn lang_cpp() -> Language {
     tree_sitter_cpp::LANGUAGE.into()
+}
+fn lang_ruby() -> Language {
+    tree_sitter_ruby::LANGUAGE.into()
+}
+fn lang_csharp() -> Language {
+    tree_sitter_c_sharp::LANGUAGE.into()
+}
+fn lang_php() -> Language {
+    tree_sitter_php::LANGUAGE_PHP.into()
+}
+fn lang_bash() -> Language {
+    tree_sitter_bash::LANGUAGE.into()
 }
 
 const PROFILES: &[AstCallProfile] = &[
@@ -146,6 +160,45 @@ const PROFILES: &[AstCallProfile] = &[
 (call_expression
   function: (qualified_identifier
     name: (identifier) @scoped))
+"#,
+    },
+    AstCallProfile {
+        language_id: "ruby",
+        language_fn: lang_ruby,
+        query_src: r#"
+(call
+  method: (identifier) @callee)
+(command
+  method: (identifier) @callee)
+"#,
+    },
+    AstCallProfile {
+        language_id: "csharp",
+        language_fn: lang_csharp,
+        query_src: r#"
+(invocation_expression
+  function: (identifier) @callee)
+(invocation_expression
+  function: (member_access_expression
+    name: (identifier) @method))
+"#,
+    },
+    AstCallProfile {
+        language_id: "php",
+        language_fn: lang_php,
+        query_src: r#"
+(function_call_expression
+  function: (name) @callee)
+(member_call_expression
+  name: (name) @method)
+"#,
+    },
+    AstCallProfile {
+        language_id: "shell",
+        language_fn: lang_bash,
+        query_src: r#"
+(command
+  name: (command_name (word) @callee))
 "#,
     },
 ];

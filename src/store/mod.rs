@@ -151,6 +151,9 @@ impl Store {
             "DELETE FROM files WHERE project = ?1",
             params![self.project],
         )?;
+        let _ = self
+            .conn
+            .execute("DELETE FROM files_fts WHERE project = ?1", params![self.project]);
         self.clear_vectors()?;
         self.conn
             .execute("DELETE FROM meta WHERE project = ?1", params![self.project])?;
@@ -174,6 +177,9 @@ impl Store {
             "DELETE FROM files WHERE project = ?1",
             params![self.project],
         )?;
+        let _ = self
+            .conn
+            .execute("DELETE FROM files_fts WHERE project = ?1", params![self.project]);
         self.clear_vectors()?;
         Ok(())
     }
@@ -348,6 +354,15 @@ impl Store {
                 file.language,
                 file.line_count,
             ],
+        )?;
+        // Keep FTS in sync with plain-text content for fast search_code.
+        self.conn.execute(
+            "DELETE FROM files_fts WHERE path = ?1 AND project = ?2",
+            params![file.path, self.project],
+        )?;
+        self.conn.execute(
+            "INSERT INTO files_fts (path, content, project, language) VALUES (?1, ?2, ?3, ?4)",
+            params![file.path, file.content, self.project, file.language],
         )?;
         Ok(())
     }
@@ -706,6 +721,63 @@ impl Store {
     }
 
     pub fn search_code(&self, pattern: &str, limit: usize) -> Result<Vec<CodeMatch>> {
+        if pattern.is_empty() || limit == 0 {
+            return Ok(vec![]);
+        }
+        // Prefer FTS5; fall back to linear scan if FTS unavailable/empty.
+        match self.search_code_fts(pattern, limit) {
+            Ok(matches) if !matches.is_empty() => Ok(matches),
+            Ok(_) => self.search_code_scan(pattern, limit),
+            Err(_) => self.search_code_scan(pattern, limit),
+        }
+    }
+
+    fn search_code_fts(&self, pattern: &str, limit: usize) -> Result<Vec<CodeMatch>> {
+        let fts_query = fts5_query_from_pattern(pattern);
+        let mut stmt = self.conn.prepare(
+            "SELECT path, content, language FROM files_fts
+             WHERE files_fts MATCH ?1 AND project = ?2
+             LIMIT ?3",
+        )?;
+        let mut matches = Vec::new();
+        let rows = stmt.query_map(params![fts_query, self.project, limit as i64], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })?;
+        for row in rows {
+            let (path, content, language) = row?;
+            let line_number = content
+                .lines()
+                .position(|line| line.contains(pattern))
+                .or_else(|| {
+                    // FTS may match tokens case-insensitively / without exact substring.
+                    let lower = pattern.to_lowercase();
+                    content
+                        .lines()
+                        .position(|line| line.to_lowercase().contains(&lower))
+                })
+                .map(|i| i + 1)
+                .unwrap_or(1);
+            matches.push(CodeMatch {
+                path,
+                language,
+                line_number,
+                preview: content
+                    .lines()
+                    .nth(line_number.saturating_sub(1))
+                    .unwrap_or("")
+                    .chars()
+                    .take(200)
+                    .collect(),
+            });
+        }
+        Ok(matches)
+    }
+
+    fn search_code_scan(&self, pattern: &str, limit: usize) -> Result<Vec<CodeMatch>> {
         let mut stmt = self
             .conn
             .prepare("SELECT path, content, language FROM files WHERE project = ?1")?;
@@ -1036,6 +1108,10 @@ impl Store {
             "DELETE FROM files WHERE path = ?1 AND project = ?2",
             params![file_path, self.project],
         )?;
+        let _ = self.conn.execute(
+            "DELETE FROM files_fts WHERE path = ?1 AND project = ?2",
+            params![file_path, self.project],
+        );
         Ok(())
     }
 
@@ -1179,6 +1255,23 @@ fn default_mmap_size() -> Option<i64> {
 
 fn read_file_content(stored: &str) -> String {
     codec::maybe_decompress(stored)
+}
+
+/// Build an FTS5 MATCH query from a free-text pattern.
+/// Quotes multi-word phrases; tokenizes identifiers safely.
+fn fts5_query_from_pattern(pattern: &str) -> String {
+    let trimmed = pattern.trim();
+    if trimmed.is_empty() {
+        return "\"\"".into();
+    }
+    // Prefer phrase match for exact substring-ish queries.
+    if trimmed.contains(' ') || trimmed.contains('(') || trimmed.contains('.') {
+        let escaped = trimmed.replace('"', "\"\"");
+        return format!("\"{escaped}\"");
+    }
+    // Single token: quote to avoid FTS operators (AND/OR/NEAR).
+    let escaped = trimmed.replace('"', "\"\"");
+    format!("\"{escaped}\"")
 }
 
 struct EdgeGraph {
