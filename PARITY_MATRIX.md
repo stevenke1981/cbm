@@ -34,6 +34,7 @@ Last updated: 2026-07-10 (INHERITS/IMPLEMENTS AST + cross-file resolve).
 | HTTP graph UI | Yes (3D) | Yes (search, node details, edge filters) | MVP |
 | Watcher / auto-reindex | Yes | Yes (backoff + dirty signature) | Done |
 | Graceful shutdown / cancel | Yes | Ctrl+C stops watcher/HTTP | MVP |
+| Background index jobs | Yes (supervised) | `index_repository background=true` + `IndexSupervisor` | Done |
 | Hybrid LSP type resolution | 9 language families | — | Not started |
 | Tree-sitter languages | 158 | 12 (Rust, Py, JS/TS, Go, Java, C, C++, Ruby, C#, PHP, Bash) | Partial |
 | FoundationDB backend | No (SQLite) | — | Omitted (SQLite only) |

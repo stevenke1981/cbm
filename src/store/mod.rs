@@ -509,6 +509,27 @@ impl Store {
                 "(name LIKE ?{param_idx} ESCAPE '\\' OR qualified_name LIKE ?{param_idx} ESCAPE '\\')"
             ));
             param_values.push(Box::new(like_q));
+            param_idx += 1;
+        }
+
+        // Relationship participation: push to SQL so we don't load entire symbol table.
+        // Degree / include_connected still need EdgeGraph post-pass when requested.
+        if let Some(rel) = &filter.relationship {
+            let direction = normalize_direction(filter.direction.as_deref());
+            let edge_cond = match direction {
+                "outbound" => format!(
+                    "EXISTS (SELECT 1 FROM edges e WHERE e.project = symbols.project AND e.edge_type = ?{param_idx} AND e.src_qn = symbols.qualified_name)"
+                ),
+                "inbound" => format!(
+                    "EXISTS (SELECT 1 FROM edges e WHERE e.project = symbols.project AND e.edge_type = ?{param_idx} AND e.dst_qn = symbols.qualified_name)"
+                ),
+                _ => format!(
+                    "EXISTS (SELECT 1 FROM edges e WHERE e.project = symbols.project AND e.edge_type = ?{param_idx} AND (e.src_qn = symbols.qualified_name OR e.dst_qn = symbols.qualified_name))"
+                ),
+            };
+            conditions.push(edge_cond);
+            param_values.push(Box::new(rel.clone()));
+            let _ = param_idx;
         }
 
         let where_clause = conditions.join(" AND ");

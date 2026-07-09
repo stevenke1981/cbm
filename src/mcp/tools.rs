@@ -1,6 +1,7 @@
 use crate::discover::IndexMode;
 use crate::error::{Error, Result};
 use crate::git;
+use crate::mcp::index_supervisor::IndexSupervisor;
 use crate::pipeline::Pipeline;
 use crate::project::normalize_project_name;
 use crate::rlm::RlmEngine;
@@ -17,6 +18,7 @@ pub struct ToolHandler {
     rlm: Arc<RlmEngine>,
     watcher: Option<Arc<Watcher>>,
     pool: &'static StorePool,
+    supervisor: &'static IndexSupervisor,
 }
 
 impl ToolHandler {
@@ -25,6 +27,7 @@ impl ToolHandler {
             rlm,
             watcher,
             pool: StorePool::global(),
+            supervisor: IndexSupervisor::global(),
         }
     }
 
@@ -84,25 +87,57 @@ impl ToolHandler {
             .get("persistence")
             .and_then(|v| v.as_bool())
             .unwrap_or_else(crate::persistence::env_enabled);
-        let pipeline = Pipeline::new(IndexMode::parse(mode)).set_export_artifact(persistence);
-        let path = std::path::Path::new(repo_path);
+        // background=true: return immediately; poll with index_status / job_id.
+        // Also accept async=true as alias.
+        let background = args
+            .get("background")
+            .or_else(|| args.get("async"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        let path = PathBuf::from(repo_path);
+        let mode = IndexMode::parse(mode);
+
+        if background {
+            let snap = self.supervisor.start(
+                path,
+                project.map(str::to_string),
+                mode,
+                incremental,
+                persistence,
+                self.watcher.clone(),
+            )?;
+            return Ok(json!({
+                "success": true,
+                "background": true,
+                "status": snap.state,
+                "job_id": snap.job_id,
+                "project": snap.project,
+                "repo_path": snap.repo_path,
+                "mode": snap.mode,
+                "incremental": snap.incremental,
+                "message": "indexing started; poll index_status with project or job_id"
+            }));
+        }
+
+        // Synchronous path (CLI + default MCP)
+        let pipeline = Pipeline::new(mode).set_export_artifact(persistence);
         let _guard = self
             .watcher
             .as_ref()
             .map(|w| PipelineGuard::new(w.pipeline_busy()));
         let result = if incremental {
-            pipeline.run_smart(path, project, true)?
+            pipeline.run_smart(&path, project, true)?
         } else {
-            pipeline.run(path, project)?
+            pipeline.run(&path, project)?
         };
 
         let project_name = &result.project;
-        // Reindex rewrites the DB — drop any cached connection.
         self.pool.invalidate(project_name);
         if let Some(w) = &self.watcher {
             w.register(
                 project_name,
-                path.canonicalize().unwrap_or_else(|_| path.to_path_buf()),
+                path.canonicalize().unwrap_or_else(|_| path.clone()),
             );
         }
 
@@ -211,15 +246,58 @@ impl ToolHandler {
     }
 
     fn index_status(&self, args: &Value) -> Result<Value> {
+        // job_id-only query (background job without opening store)
+        if let Some(job_id) = args.get("job_id").and_then(|v| v.as_str()) {
+            if let Some(job) = self.supervisor.get_job(job_id) {
+                return Ok(json!({
+                    "job": job,
+                    "project": job.project,
+                    "indexing": matches!(job.state, crate::mcp::JobState::Queued | crate::mcp::JobState::Running),
+                }));
+            }
+            return Err(Error::InvalidArgument(format!("unknown job_id: {job_id}")));
+        }
+
         let project = normalize_project_name(Self::require_str(args, "project")?);
-        let mut value = self.with_store(&project, |store| {
+        let mut value = match self.with_store(&project, |store| {
             let status = store.index_status()?;
             Ok(serde_json::to_value(status)?)
-        })?;
-        if let Some(watcher) = &self.watcher {
-            let projects = watcher.project_status();
-            if let Some(w) = projects.iter().find(|p| p.project == project) {
-                if let Some(obj) = value.as_object_mut() {
+        }) {
+            Ok(v) => v,
+            Err(_) => {
+                // Project DB may not exist yet while background job is first-time index
+                json!({
+                    "project": project,
+                    "indexed": false,
+                    "symbol_count": 0,
+                    "edge_count": 0,
+                    "file_count": 0,
+                })
+            }
+        };
+        if let Some(obj) = value.as_object_mut() {
+            if let Some(job) = self.supervisor.active_for_project(&project) {
+                obj.insert("job".into(), serde_json::to_value(&job)?);
+                obj.insert(
+                    "indexing".into(),
+                    json!(matches!(
+                        job.state,
+                        crate::mcp::JobState::Queued | crate::mcp::JobState::Running
+                    )),
+                );
+            } else if let Some(job_id) = args.get("job_id").and_then(|v| v.as_str()) {
+                if let Some(job) = self.supervisor.get_job(job_id) {
+                    obj.insert("job".into(), serde_json::to_value(&job)?);
+                }
+            } else {
+                // last known completed job for project (scan jobs)
+                // optional: leave indexing=false
+                obj.entry("indexing".to_string())
+                    .or_insert(json!(false));
+            }
+            if let Some(watcher) = &self.watcher {
+                let projects = watcher.project_status();
+                if let Some(w) = projects.iter().find(|p| p.project == project) {
                     obj.insert("watcher".into(), serde_json::to_value(w)?);
                 }
             }
@@ -426,7 +504,7 @@ pub fn tool_definitions() -> Vec<Value> {
     vec![
         tool_def(
             "index_repository",
-            "Index a repository into the knowledge graph.",
+            "Index a repository into the knowledge graph. Set background=true to return immediately and poll index_status.",
             json!({
                 "type": "object",
                 "required": ["repo_path"],
@@ -435,7 +513,9 @@ pub fn tool_definitions() -> Vec<Value> {
                     "project": { "type": ["string", "null"] },
                     "mode": { "type": ["string", "null"], "enum": ["full", "moderate", "fast"] },
                     "incremental": { "type": ["boolean", "null"], "default": false },
-                    "persistence": { "type": ["boolean", "null"] }
+                    "persistence": { "type": ["boolean", "null"] },
+                    "background": { "type": ["boolean", "null"], "default": false, "description": "If true, start index in a worker thread and return job_id immediately" },
+                    "async": { "type": ["boolean", "null"], "description": "Alias for background" }
                 }
             }),
         ),
@@ -514,11 +594,13 @@ pub fn tool_definitions() -> Vec<Value> {
         ),
         tool_def(
             "index_status",
-            "Index status query.",
+            "Index status query. Pass project and/or job_id (from background index_repository).",
             json!({
                 "type": "object",
-                "required": ["project"],
-                "properties": { "project": { "type": "string" } }
+                "properties": {
+                    "project": { "type": "string" },
+                    "job_id": { "type": "string", "description": "Background index job id" }
+                }
             }),
         ),
         tool_def(
