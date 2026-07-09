@@ -4,6 +4,7 @@ mod communities;
 mod extract;
 mod imports;
 mod inheritance;
+mod inheritance_ast;
 mod pass;
 mod routes;
 mod structure;
@@ -13,7 +14,11 @@ pub use calls_ast::{AstCallProfile, AstCallResolver};
 pub use communities::*;
 pub use extract::*;
 pub use imports::{extract_import_edges, ImportResolver};
-pub use inheritance::*;
+pub use inheritance::{
+    build_file_name_index, build_project_name_index, extract_inheritance_edges,
+    extract_inheritance_edges_with_project, InheritancePipeline, InheritanceResolver,
+};
+pub use inheritance_ast::{AstInheritanceResolver, InheritanceProfile};
 pub use pass::{
     default_passes, run_passes, CallsPass, CommunitiesPass, ImportsPass, IndexPass,
     InheritancePass, PassContext, PassOutcome, RoutesPass, SemanticPass, StructurePass,

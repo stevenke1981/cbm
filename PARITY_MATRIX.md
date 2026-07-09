@@ -5,7 +5,7 @@ Status key: **Done** | **Partial** | **MVP** | **Not started** | **Omitted**
 Primary reference: [DeusData/codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp) (C engine).
 Secondary notes: local `knowledge-graph/` architecture docs when present.
 
-Last updated: 2026-07-09 (OOP pass pipeline + StorePool alignment).
+Last updated: 2026-07-10 (INHERITS/IMPLEMENTS AST + cross-file resolve).
 
 ## Status model
 
@@ -51,7 +51,7 @@ Last updated: 2026-07-09 (OOP pass pipeline + StorePool alignment).
 | CALLS edges | Yes | AST: Rust/Py/JS/TS/Go/Java/C/C++/Ruby/C#/PHP/Bash + regex | Done (supported langs) |
 | Store bulk transaction / replace edges | Yes | `bulk_index`, `replace_edges_of_type(s)` | Done |
 | `search_code` FTS5 | Yes | `files_fts` virtual table + scan fallback | Done |
-| INHERITS / IMPLEMENTS | Yes | Regex per language | Partial (heuristic) |
+| INHERITS / IMPLEMENTS | Yes | AST (Py/JS/TS/Java/Rust/Go/C++/Ruby) + regex fallback | Done (supported langs) |
 | DECORATES | Yes | Attribute patterns | Partial (heuristic) |
 | HTTP route pass | Yes | `HTTP_ROUTE` multi-framework patterns | Partial |
 | HTTP client→route | Yes | `HTTP_CALLS` path matching | MVP |
@@ -69,9 +69,9 @@ Last updated: 2026-07-09 (OOP pass pipeline + StorePool alignment).
 | SIMILAR_TO | When semantic enabled | Multi-signal scoring |
 | SEMANTICALLY_RELATED | When semantic enabled | Lower threshold pairs |
 | RUNTIME_TRACE | Yes | Via `ingest_traces` |
-| INHERITS / IMPLEMENTS / DECORATES | Yes | Regex (partial language coverage) |
+| INHERITS / IMPLEMENTS / DECORATES | Yes | AST + regex; DECORATES still regex |
 | HTTP_ROUTE | Yes | Framework-limited patterns |
-| HTTP_CALLS | No | Backlog |
+| HTTP_CALLS | Yes | Path-match MVP |
 
 ## MCP tools
 
@@ -140,6 +140,7 @@ These are **not done** and should not be inferred from MVP completion:
 | `search_code` FTS5 | — | **Done** |
 | Multi-language AST-aware CALLS | — | **Done** for 12 language families |
 | Store bulk transaction API | — | **Done** (`bulk_index`, `replace_edges_of_type`) |
+| INHERITS / IMPLEMENTS AST | — | **Done** for Py/JS/TS/Java/Rust/Go/C++/Ruby |
 | Tree-sitter coverage gaps | P2 | Kotlin, Swift, … (beyond current 12) |
 | FoundationDB backend | — | Omitted; SQLite is canonical |
 | Wrapper packaging (Go/PyPI/npm/Chocolatey/AUR) | P3 | See `packaging/DEFERRED_CHANNELS.md` |
@@ -150,8 +151,8 @@ These are **not done** and should not be inferred from MVP completion:
 
 A new agent should treat these as blockers before claiming equivalence with the reference C implementation:
 
-1. Regex/heuristic graph passes remain for imports, inheritance, and unsupported languages (CALLS AST covers Rust/Py/JS/TS/Go/Java/C/C++).
+1. Regex/heuristic remains for imports (absolute packages), decorators, and languages without AST profiles.
 2. Community detection is connected-components, not modularity optimization.
-3. HTTP routes are pattern-limited; no `HTTP_CALLS`.
+3. HTTP routes/calls are pattern/path limited (no OpenAPI/template expansion).
 4. No Hybrid LSP type resolution (C reference has 9 language families).
 5. FoundationDB and reference C foundation layer omitted by design.

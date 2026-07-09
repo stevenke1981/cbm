@@ -6,8 +6,8 @@
 
 use super::{
     apply_community_properties, build_structure_graph, detect_communities,
-    extract_http_client_calls, extract_http_routes, extract_inheritance_edges, link_http_calls,
-    rebuild_call_edges, ImportResolver,
+    extract_http_client_calls, extract_http_routes, extract_inheritance_edges_with_project,
+    link_http_calls, rebuild_call_edges, ImportResolver,
 };
 use crate::discover::IndexMode;
 use crate::error::Result;
@@ -242,16 +242,44 @@ impl IndexPass for InheritancePass {
 
     fn run(&self, ctx: &mut PassContext<'_>) -> Result<PassOutcome> {
         let by_file = ctx.symbols_by_file();
-        let mut inheritance_edges = Vec::new();
-        for file in ctx.store.list_files()? {
-            if let Some(syms) = by_file.get(&file.path) {
-                inheritance_edges.extend(extract_inheritance_edges(
-                    &file.path,
-                    &file.language,
-                    &file.content,
-                    syms,
-                ));
+        // Include structure/class symbols already in store for cross-file parent resolution.
+        let project_symbols: Vec<Symbol> = {
+            let mut all = ctx.code_symbols.clone();
+            if let Ok(stored) = ctx.store.list_symbols() {
+                for s in stored {
+                    if matches!(s.label.as_str(), "Class" | "Interface")
+                        && !all.iter().any(|e| e.qualified_name == s.qualified_name)
+                    {
+                        all.push(s);
+                    }
+                }
             }
+            all
+        };
+        let mut inheritance_edges = Vec::new();
+        let mut ast_count = 0usize;
+        for file in ctx.store.list_files()? {
+            let file_syms = by_file
+                .get(&file.path)
+                .map(|s| s.as_slice())
+                .unwrap_or(&[]);
+            let before = inheritance_edges.len();
+            inheritance_edges.extend(extract_inheritance_edges_with_project(
+                &file.path,
+                &file.language,
+                &file.content,
+                file_syms,
+                &project_symbols,
+            ));
+            // Count AST-tagged edges added for this file
+            ast_count += inheritance_edges[before..]
+                .iter()
+                .filter(|e| {
+                    e.properties_json
+                        .as_ref()
+                        .is_some_and(|p| p.contains(r#""method":"ast""#))
+                })
+                .count();
         }
         ctx.store.replace_edges_of_types(
             &["INHERITS", "IMPLEMENTS", "DECORATES"],
@@ -260,6 +288,7 @@ impl IndexPass for InheritancePass {
         ctx.edge_count += inheritance_edges.len();
         Ok(PassOutcome {
             edges_written: inheritance_edges.len(),
+            notes: vec![format!("ast_edges={ast_count}")],
             ..Default::default()
         })
     }

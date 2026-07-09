@@ -448,6 +448,95 @@ fn emits_inherits_edge_for_python_class() {
     let index = pipeline.run(dir.path(), Some("inherits")).unwrap();
     let store = Store::open(&index.project).unwrap();
     assert!(store.count_edges_by_type("INHERITS").unwrap() >= 1);
+    let edges = store.list_edges().unwrap();
+    let inherits = edges
+        .iter()
+        .find(|e| e.edge_type == "INHERITS" && e.src_qn.contains("Child"))
+        .expect("Child INHERITS edge");
+    assert!(
+        inherits
+            .properties_json
+            .as_ref()
+            .is_some_and(|p| p.contains("ast") || p.contains("regex")),
+        "expected method metadata: {inherits:?}"
+    );
+
+    let _ = cbm::store::delete_project_db(&index.project);
+}
+
+#[test]
+fn emits_java_inherits_and_implements() {
+    let (_guard, _cache, _) = isolated_cache();
+    let dir = TempDir::new().unwrap();
+    fs::write(
+        dir.path().join("Animals.java"),
+        r#"
+interface Runnable {}
+class Animal {}
+class Dog extends Animal implements Runnable {
+  void bark() {}
+}
+"#,
+    )
+    .unwrap();
+
+    let pipeline = Pipeline::new(IndexMode::Full);
+    let index = pipeline.run(dir.path(), Some("java-inherits")).unwrap();
+    let store = Store::open(&index.project).unwrap();
+    assert!(
+        store.count_edges_by_type("INHERITS").unwrap() >= 1,
+        "expected INHERITS"
+    );
+    assert!(
+        store.count_edges_by_type("IMPLEMENTS").unwrap() >= 1,
+        "expected IMPLEMENTS"
+    );
+
+    let _ = cbm::store::delete_project_db(&index.project);
+}
+
+#[test]
+fn emits_js_inherits_extends() {
+    let (_guard, _cache, _) = isolated_cache();
+    let dir = TempDir::new().unwrap();
+    fs::write(
+        dir.path().join("shapes.js"),
+        "class Shape {}\nclass Circle extends Shape {\n  draw() {}\n}\n",
+    )
+    .unwrap();
+
+    let pipeline = Pipeline::new(IndexMode::Full);
+    let index = pipeline.run(dir.path(), Some("js-inherits")).unwrap();
+    let store = Store::open(&index.project).unwrap();
+    assert!(store.count_edges_by_type("INHERITS").unwrap() >= 1);
+
+    let _ = cbm::store::delete_project_db(&index.project);
+}
+
+#[test]
+fn resolves_cross_file_python_parent() {
+    let (_guard, _cache, _) = isolated_cache();
+    let dir = TempDir::new().unwrap();
+    fs::write(dir.path().join("base.py"), "class Base:\n    pass\n").unwrap();
+    fs::write(
+        dir.path().join("child.py"),
+        "from base import Base\nclass Child(Base):\n    pass\n",
+    )
+    .unwrap();
+
+    let pipeline = Pipeline::new(IndexMode::Full);
+    let index = pipeline.run(dir.path(), Some("xfile-inherits")).unwrap();
+    let store = Store::open(&index.project).unwrap();
+    let edges = store.list_edges().unwrap();
+    assert!(
+        edges.iter().any(|e| {
+            e.edge_type == "INHERITS"
+                && e.src_qn.contains("Child")
+                && e.dst_qn.contains("Base")
+                && e.dst_qn.contains("base.py")
+        }),
+        "expected cross-file INHERITS to base.py::Base: {edges:?}"
+    );
 
     let _ = cbm::store::delete_project_db(&index.project);
 }
