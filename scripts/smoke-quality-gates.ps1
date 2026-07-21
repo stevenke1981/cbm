@@ -17,9 +17,9 @@ Write-Host "==> cargo fmt --check" -ForegroundColor Cyan
 cargo fmt --check
 if ($LASTEXITCODE -ne 0) { throw "cargo fmt --check failed" }
 
-Write-Host "==> cargo test" -ForegroundColor Cyan
-cargo test
-if ($LASTEXITCODE -ne 0) { throw "cargo test failed" }
+Write-Host "==> cargo test --all-targets" -ForegroundColor Cyan
+cargo test --all-targets
+if ($LASTEXITCODE -ne 0) { throw "cargo test --all-targets failed" }
 
 Write-Host "==> cargo clippy" -ForegroundColor Cyan
 cargo clippy --all-targets -- -D warnings
@@ -56,23 +56,23 @@ function Invoke-CbmCliStdout([string[]]$CliArgs) {
 }
 
 Write-Host "==> smoke: index_repository" -ForegroundColor Cyan
-$indexOut = Invoke-CbmCli @(
-    'cli', 'index_repository', '--json',
+$indexOut = Invoke-CbmCliStdout @(
+    'cli', 'index_repository', '--json', '--quiet',
     '{"repo_path":".","project":"smoke-review","mode":"fast","persistence":false}'
 )
 if ($indexOut -notmatch '"success":true') { throw "index_repository did not report success" }
 if ($indexOut -notmatch '"edges_extracted":[1-9]') { throw "index_repository emitted no edges" }
 
 Write-Host "==> smoke: search_graph" -ForegroundColor Cyan
-$searchOut = Invoke-CbmCli @(
-    'cli', 'search_graph', '--json',
+$searchOut = Invoke-CbmCliStdout @(
+    'cli', 'search_graph', '--json', '--quiet',
     '{"project":"smoke-review","query":"run_cli","limit":3}'
 )
 if ($searchOut -notmatch 'run_cli') { throw "search_graph did not find run_cli" }
 
 Write-Host "==> smoke: get_architecture" -ForegroundColor Cyan
-$archOut = Invoke-CbmCli @(
-    'cli', 'get_architecture', '--json',
+$archOut = Invoke-CbmCliStdout @(
+    'cli', 'get_architecture', '--json', '--quiet',
     '{"project":"smoke-review"}'
 )
 foreach ($edge in @("CALLS", "CONTAINS", "IMPORTS")) {

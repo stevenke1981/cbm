@@ -121,6 +121,10 @@ pub struct SemanticEdges {
     pub related: Vec<Edge>,
 }
 
+/// Minimum quantized-cosine score to attempt full scoring.
+/// Pairs below this are skipped entirely (O(n²) → O(n² · pass_rate)).
+const RI_PREFILTER_THRESHOLD: f32 = 0.05;
+
 pub fn compute_semantic_edges(
     symbols: &[Symbol],
     vectors: &[Vector],
@@ -130,10 +134,19 @@ pub fn compute_semantic_edges(
     let profiles: Vec<SymbolProfile> = symbols.iter().map(SymbolProfile::from_symbol).collect();
     let diffusion = signals::DiffusionContext::from_call_edges(symbols, call_edges);
 
+    // Pre-compute quantized vectors for the cheap i8 cosine prefilter.
+    let quantized: Vec<Vec<i8>> = vectors.iter().map(|v| v.quantized()).collect();
+
     let mut pair_scores: Vec<(usize, usize, ScoreBreakdown)> = Vec::new();
+    let mut skipped_by_prefilter: usize = 0;
     for i in 0..symbols.len() {
         for j in (i + 1)..symbols.len() {
             if symbols[i].file_path == symbols[j].file_path && symbols[i].name == symbols[j].name {
+                continue;
+            }
+            // Cheap prefilter: skip pairs with near-zero RI similarity.
+            if cosine_i8(&quantized[i], &quantized[j]) < RI_PREFILTER_THRESHOLD {
+                skipped_by_prefilter += 1;
                 continue;
             }
             let breakdown = signals::score_pair_with_diffusion(
@@ -152,6 +165,12 @@ pub fn compute_semantic_edges(
                 pair_scores.push((i, j, breakdown));
             }
         }
+    }
+    if skipped_by_prefilter > 0 {
+        info!(
+            skipped = skipped_by_prefilter,
+            "semantic prefilter skipped low-similarity pairs"
+        );
     }
 
     pair_scores.sort_by(|a, b| {

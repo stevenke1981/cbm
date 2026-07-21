@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag (e.g. v0.1.0) — used for draft naming only when not pushing a tag"
+        description: "Release tag (e.g. v0.1.0) ??used for draft naming only when not pushing a tag"
         required: false
         default: "manual"
 
@@ -20,8 +20,12 @@ env:
 
 jobs:
   test:
-    name: Test
-    runs-on: ubuntu-latest
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -30,6 +34,7 @@ jobs:
           workspaces: .
       - run: cargo fmt --check
       - run: cargo test --all-targets
+      - run: cargo clippy --all-targets -- -D warnings
 
   build:
     name: Build (${{ matrix.artifact }})
@@ -55,7 +60,7 @@ jobs:
             target: aarch64-apple-darwin
             artifact: cbm-macos-arm64
             archive: tar.gz
-          - os: macos-13
+          - os: macos-latest
             target: x86_64-apple-darwin
             artifact: cbm-macos-x64
             archive: tar.gz

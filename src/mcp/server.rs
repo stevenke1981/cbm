@@ -4,13 +4,13 @@ use crate::mcp::transport::{read_stdin_message, write_stdout_message};
 use crate::rlm::RlmEngine;
 use crate::watcher::Watcher;
 use serde_json::{json, Value};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 pub const SERVER_NAME: &str = "cbm-mcp";
 pub const SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub struct McpServer {
-    handler: ToolHandler,
+    handler: Arc<ToolHandler>,
     watcher: Option<Arc<Watcher>>,
 }
 
@@ -25,7 +25,7 @@ impl McpServer {
             None
         };
         Self {
-            handler: ToolHandler::new(rlm, watcher.clone()),
+            handler: Arc::new(ToolHandler::new(rlm, watcher.clone())),
             watcher,
         }
     }
@@ -55,6 +55,9 @@ impl McpServer {
         &self,
         shutdown: Option<Arc<crate::runtime::Shutdown>>,
     ) -> Result<()> {
+        // Mutex-protected stdout so concurrent tool threads can write responses.
+        let stdout_lock = Arc::new(Mutex::new(()));
+
         loop {
             if shutdown.as_ref().is_some_and(|s| s.is_triggered()) {
                 self.stop_services();
@@ -64,9 +67,36 @@ impl McpServer {
                 self.stop_services();
                 break;
             };
-            let response = self.handle_message(&message.body)?;
-            if let Some(body) = response {
-                write_stdout_message(&body, message.framing)?;
+
+            // Fast path: parse to check if this is a tools/call request.
+            let request: Value = match serde_json::from_str(&message.body) {
+                Ok(v) => v,
+                Err(e) => {
+                    let err = format_error(Value::Null, -32700, &e.to_string())?;
+                    write_stdout_message(&err, message.framing)?;
+                    continue;
+                }
+            };
+            let method = request.get("method").and_then(|m| m.as_str()).unwrap_or("");
+
+            if method == "tools/call" {
+                // Spawn a worker thread so long-running tools don't block stdin.
+                let handler = self.handler.clone();
+                let framing = message.framing;
+                let out = stdout_lock.clone();
+                std::thread::spawn(move || {
+                    let response = handle_request(&handler, &request);
+                    if let Some(body) = response {
+                        let _guard = out.lock().unwrap();
+                        let _ = write_stdout_message(&body, framing);
+                    }
+                });
+            } else {
+                // Handle non-tool messages synchronously (initialize, tools/list, etc.)
+                let response = handle_request(&self.handler, &request);
+                if let Some(body) = response {
+                    write_stdout_message(&body, message.framing)?;
+                }
             }
         }
         Ok(())
@@ -74,65 +104,67 @@ impl McpServer {
 
     pub fn handle_message(&self, raw: &str) -> Result<Option<String>> {
         let request: Value = serde_json::from_str(raw)?;
-        let id = request.get("id").cloned();
-        let method = request.get("method").and_then(|m| m.as_str()).unwrap_or("");
+        Ok(handle_request(&self.handler, &request))
+    }
+}
 
-        let result = match method {
-            "initialize" => Ok(self.handle_initialize(&request)),
-            "notifications/initialized" | "initialized" => return Ok(None),
-            "ping" => Ok(json!({})),
-            "tools/list" => Ok(json!({ "tools": tool_definitions() })),
-            "tools/call" => self.handle_tool_call(&request),
-            _ => {
-                if id.is_none() {
-                    return Ok(None);
-                }
-                Err(Error::InvalidArgument(format!("unknown method: {method}")))
-            }
-        };
+fn handle_initialize() -> Value {
+    let watcher_on = watcher_enabled();
+    json!({
+        "protocolVersion": "2024-11-05",
+        "capabilities": {
+            "tools": { "listChanged": false }
+        },
+        "serverInfo": {
+            "name": SERVER_NAME,
+            "version": SERVER_VERSION
+        },
+        "instructions": format!(
+            "CBM server. Index first with index_repository. RLM: rlm_workflow → filter → map → reduce. Projects use cbm+ prefix. Git watcher: {watcher_on}."
+        )
+    })
+}
 
-        match (id, result) {
-            (None, _) => Ok(None),
-            (Some(id), Ok(value)) => Ok(Some(format_response(id, value)?)),
-            (Some(id), Err(e)) => Ok(Some(format_error(id, -32603, &e.to_string())?)),
+fn handle_tool_call(handler: &ToolHandler, request: &Value) -> Result<Value> {
+    let params = request
+        .get("params")
+        .ok_or_else(|| Error::InvalidArgument("missing params".into()))?;
+    let name = params
+        .get("name")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::InvalidArgument("missing tool name".into()))?;
+    let args = params.get("arguments").cloned().unwrap_or(json!({}));
+    let result = handler.handle(name, &args)?;
+    Ok(json!({
+        "content": [{
+            "type": "text",
+            "text": serde_json::to_string_pretty(&result)?
+        }],
+        "isError": false
+    }))
+}
+
+/// Dispatch a parsed JSON-RPC request. Usable from any thread.
+fn handle_request(handler: &ToolHandler, request: &Value) -> Option<String> {
+    let id = request.get("id").cloned();
+    let method = request.get("method").and_then(|m| m.as_str()).unwrap_or("");
+
+    let result = match method {
+        "initialize" => Ok(handle_initialize()),
+        "notifications/initialized" | "initialized" => return None,
+        "ping" => Ok(json!({})),
+        "tools/list" => Ok(json!({ "tools": tool_definitions() })),
+        "tools/call" => handle_tool_call(handler, request),
+        _ => {
+            id.as_ref()?;
+            Err(Error::InvalidArgument(format!("unknown method: {method}")))
         }
-    }
+    };
 
-    fn handle_initialize(&self, request: &Value) -> Value {
-        let _params = request.get("params");
-        let watcher_on = self.watcher.is_some();
-        json!({
-            "protocolVersion": "2024-11-05",
-            "capabilities": {
-                "tools": { "listChanged": false }
-            },
-            "serverInfo": {
-                "name": SERVER_NAME,
-                "version": SERVER_VERSION
-            },
-            "instructions": format!(
-                "CBM server. Index first with index_repository. RLM: rlm_workflow → filter → map → reduce. Projects use cbm+ prefix. Git watcher: {watcher_on}."
-            )
-        })
-    }
-
-    fn handle_tool_call(&self, request: &Value) -> Result<Value> {
-        let params = request
-            .get("params")
-            .ok_or_else(|| Error::InvalidArgument("missing params".into()))?;
-        let name = params
-            .get("name")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| Error::InvalidArgument("missing tool name".into()))?;
-        let args = params.get("arguments").cloned().unwrap_or(json!({}));
-        let result = self.handler.handle(name, &args)?;
-        Ok(json!({
-            "content": [{
-                "type": "text",
-                "text": serde_json::to_string_pretty(&result)?
-            }],
-            "isError": false
-        }))
+    match (id, result) {
+        (None, _) => None,
+        (Some(id), Ok(value)) => format_response(id, value).ok(),
+        (Some(id), Err(e)) => format_error(id, -32603, &e.to_string()).ok(),
     }
 }
 

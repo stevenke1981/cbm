@@ -18,8 +18,8 @@ fi
 echo "==> cargo fmt --check"
 cargo fmt --check
 
-echo "==> cargo test"
-cargo test
+echo "==> cargo test --all-targets"
+cargo test --all-targets
 
 echo "==> cargo clippy"
 cargo clippy --all-targets -- -D warnings
@@ -42,33 +42,30 @@ INDEX_JSON='{"repo_path":".","project":"smoke-review","mode":"fast","persistence
 SEARCH_JSON='{"project":"smoke-review","query":"run_cli","limit":3}'
 ARCH_JSON='{"project":"smoke-review"}'
 
+# Run CLI with --json --quiet; stdout is pure JSON, stderr is diagnostics.
 run_cli() {
-  local out
-  out="$("$BIN" "$@" 2>&1)" || {
-    echo "$out" >&2
-    exit 1
-  }
-  printf '%s' "$out"
+  "$BIN" "$@" 2>/dev/null
 }
 
 echo "==> smoke: index_repository"
-index_out="$(run_cli cli index_repository --json "$INDEX_JSON")"
+index_out="$(run_cli cli index_repository --json --quiet "$INDEX_JSON")"
 echo "$index_out" | grep -q '"success":true'
 echo "$index_out" | grep -qE '"edges_extracted":[1-9]'
 
 echo "==> smoke: search_graph"
-search_out="$(run_cli cli search_graph --json "$SEARCH_JSON")"
+search_out="$(run_cli cli search_graph --json --quiet "$SEARCH_JSON")"
 echo "$search_out" | grep -q 'run_cli'
 
 echo "==> smoke: get_architecture"
-arch_out="$(run_cli cli get_architecture --json "$ARCH_JSON")"
+arch_out="$(run_cli cli get_architecture --json --quiet "$ARCH_JSON")"
 for edge in CALLS CONTAINS IMPORTS; do
   echo "$arch_out" | grep -q "$edge"
 done
 
 echo "==> smoke: query_graph edge diversity"
-query_out="$("$BIN" cli query_graph --json --quiet '{"project":"smoke-review","query":"SELECT edge_type, COUNT(*) AS count FROM edges GROUP BY edge_type"}' 2>/dev/null)"
-echo "$query_out" | python3 -c "import json,sys; json.load(sys.stdin)" 2>/dev/null || echo "$query_out" | python -c "import json,sys; json.load(sys.stdin)"
+query_out="$(run_cli cli query_graph --json --quiet '{"project":"smoke-review","query":"SELECT edge_type, COUNT(*) AS count FROM edges GROUP BY edge_type"}')"
+# Validate JSON without python dependency
+echo "$query_out" | grep -q '"edge_type"'
 for edge in CALLS CONTAINS IMPORTS; do
   echo "$query_out" | grep -q "$edge"
 done

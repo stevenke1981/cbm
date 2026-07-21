@@ -338,6 +338,7 @@ impl Store {
         let _ = self.conn.pragma_update(None, "synchronous", "NORMAL");
         if result.is_ok() {
             let _ = self.checkpoint();
+            self.checkpoint_truncate_if_wal_large();
         }
         result
     }
@@ -406,6 +407,18 @@ impl Store {
                     Ok((row.get(0)?, row.get(1)?, row.get(2)?))
                 })?;
         Ok(())
+    }
+
+    /// If the WAL file exceeds 10 MB, run a TRUNCATE checkpoint to reclaim space.
+    fn checkpoint_truncate_if_wal_large(&self) {
+        const WAL_THRESHOLD: u64 = 10 * 1024 * 1024; // 10 MB
+        let path = project_db_path(&self.project);
+        let wal_path = path.with_extension("db-wal");
+        if let Ok(meta) = std::fs::metadata(&wal_path) {
+            if meta.len() > WAL_THRESHOLD {
+                let _ = self.checkpoint_truncate();
+            }
+        }
     }
 
     pub fn count_symbols(&self) -> Result<i64> {
