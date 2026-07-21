@@ -58,7 +58,7 @@ Last updated: 2026-07-10 (FunctionRegistry import-map CALLS + tsconfig aliases).
 | HTTP client→route | Yes | `HTTP_CALLS` exact/template/suffix matching | Partial |
 | Git history / cross-repo | Yes | Git HEAD + dirty detection only | Partial |
 | Community detection | Yes | Louvain modularity (default); components fallback | Done (Louvain) |
-| Post-processing summaries | Yes | `get_architecture` + communities | Partial |
+| Post-processing summaries | Yes | `get_architecture` + communities + dead code | Done |
 
 ## Edge types emitted
 
@@ -83,8 +83,9 @@ Last updated: 2026-07-10 (FunctionRegistry import-map CALLS + tsconfig aliases).
 | `trace_path` | Done | BFS |
 | `get_code_snippet` | Done | |
 | `get_graph_schema` | Done | Honest `implemented_edge_types` |
-| `get_architecture` | MVP | Counts, communities (components) |
+| `get_architecture` | Done | Counts, communities, dead code detection |
 | `query_graph` | Done | SELECT-only guard |
+| `check_index_coverage` | Done | File path coverage check |
 | `rlm_scan` / `rlm_chunk` | Done | Persisted sessions across CLI invocations |
 | `rlm_*` (other) | Partial | Workflow hints |
 

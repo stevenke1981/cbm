@@ -942,6 +942,8 @@ impl Store {
             .community_summary_from_meta()?
             .unwrap_or_else(|| self.community_summary_from_symbols().unwrap_or((0, vec![])));
 
+        let dead_code = self.detect_dead_code()?;
+
         Ok(ArchitectureSummary {
             project: self.project.clone(),
             symbol_count: symbol_count as usize,
@@ -952,7 +954,56 @@ impl Store {
             top_functions: top_functions.symbols,
             community_count,
             top_communities,
+            dead_code,
         })
+    }
+
+    /// Find functions with zero inbound CALLS edges, excluding entry points.
+    fn detect_dead_code(&self) -> Result<Vec<Symbol>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT s.qualified_name, s.name, s.label, s.file_path, s.line_start, s.line_end, s.signature, s.properties_json
+             FROM symbols s
+             WHERE s.project = ?1
+               AND s.label IN ('Function', 'Method')
+               AND NOT EXISTS (
+                   SELECT 1 FROM edges e
+                   WHERE e.project = s.project
+                     AND e.edge_type = 'CALLS'
+                     AND e.dst_qn = s.qualified_name
+               )
+             ORDER BY s.qualified_name
+             LIMIT 50",
+        )?;
+        let candidates: Vec<Symbol> = stmt
+            .query_map(params![self.project], symbol_from_row)?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+
+        // Exclude common entry-point patterns.
+        let entry_patterns = [
+            "main",
+            "handler",
+            "handle",
+            "route",
+            "test",
+            "spec",
+            "setup",
+            "teardown",
+            "before_each",
+            "after_each",
+            "middleware",
+            "init",
+            "run",
+            "start",
+            "serve",
+            "listen",
+        ];
+        Ok(candidates
+            .into_iter()
+            .filter(|sym| {
+                let lower = sym.name.to_lowercase();
+                !entry_patterns.iter().any(|p| lower.contains(p))
+            })
+            .collect())
     }
 
     pub fn index_status(&self) -> Result<IndexStatus> {
@@ -1241,6 +1292,17 @@ impl Store {
             })?
             .collect::<std::result::Result<Vec<_>, _>>()?;
         Ok(rows)
+    }
+
+    /// Return only the file paths (no content) for coverage checks.
+    pub fn list_indexed_paths(&self) -> Result<Vec<String>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT path FROM files WHERE project = ?1")?;
+        let paths = stmt
+            .query_map(params![self.project], |row| row.get(0))?
+            .collect::<std::result::Result<Vec<String>, _>>()?;
+        Ok(paths)
     }
 }
 

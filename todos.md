@@ -1,311 +1,381 @@
-# cbm MCP 效能改善 TODO
+# CBM — DeusData 功能對齊 TODO
 
-本文件記錄 cbm MCP 伺服器在使用時「有時很快、有時卡住」的根因與可採取的行動項目。
-
-## 效能觀察摘要
-
-| 情境 | 表現 | 根本原因 |
-|------|------|----------|
-| 小型專案（< 500 symbols）+ 基本 `search_graph` | 快速 | SQLite 全量載入仍可接受 |
-| `get_code_snippet` 已知 qualified_name | 快速 | 單一 SQL 查詢 |
-| `index_status` / `list_projects` | 快速 | 輕量查詢 |
-| 大型專案（5000+ symbols）+ `search_graph` 含 `relationship` | **卡住** | 載入所有 symbols + edges 到記憶體 |
-| 大量索引後的 `search_code()` | **卡住** | 載入並解壓縮每個檔案內容 |
-| `trace_path` depth > 3 且圖大 | **卡住** | N+1 SQL（每層每鄰居獨立查詢） |
-| 大型專案 `index_repository` | **卡住** | MCP 單執行緒阻塞其他請求 |
-| `vector_search()` 200+ 向量 | **卡住** | N+1 查詢（每向量一次 find_symbol） |
-| `get_architecture()` 大量 symbols | **卡住** | 全量載入 symbols 計算社群 |
+參考：[DeusData/codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp) v0.8.1
+上次更新：2026-07-22
 
 ---
 
-## P0 — 搜尋正確性與使用體驗（先決條件）
+## 已完成（效能改善）
 
-### TODO P0.1 — `search_graph` 使用 SQL WHERE 下推過濾
-
-**問題：** `store/search()` 先 `SELECT * FROM symbols WHERE project = ?1` 載入全部 symbols，再在 Rust 端逐筆過濾。對 5000+ symbols 的專案每次 search 都浪費大量記憶體與 CPU。
-
-**改進方式：**
-
-```rust
-// 現在（壞）
-let all: Vec<Symbol> = stmt.query_map(...)...collect();
-let filtered: Vec<Symbol> = all.iter().filter(|sym| matches_filter(sym, filter)).collect();
-
-// 改為（好）
-// 將 label, query, name_pattern, qn_pattern, file_pattern 編譯成 SQL WHERE 子句
-// 例如：WHERE project = ?1 AND label = ?2 AND name LIKE ?3
-// 只有在需要 relationship/degree 過濾時才載入全部
-```
-
-**完成條件：**
-
-- `search_graph(label="Function", query="foo")` 實際只從 SQLite 取得少量 row
-- 專案 10000+ symbols，不使用 graph filter 時 response < 100ms
-- 仍然支援 `include_connected`, `exclude_entry_points`, `min_degree`, `max_degree`（需要載入 edges 但只在必要時）
+| # | 項目 | 狀態 |
+|---|------|------|
+| P0.1 | search_graph SQL WHERE 下推 | ✅ Done |
+| P0.2 | search_code FTS5 | ✅ Done |
+| P1.1 | MCP 非同步（背景索引 + tools/call 執行緒） | ✅ Done |
+| P1.2 | trace_path N+1 → find_symbols_batch | ✅ Done |
+| P1.3 | vector_search N+1 → find_symbols_batch | ✅ Done |
+| P1.4 | SQLite pragmas（64MB cache, mmap 256MB） | ✅ Done |
+| P2.1 | get_architecture SQL COUNT + community meta | ✅ Done |
+| P2.2 | StorePool 連線池 | ✅ Done |
+| P2.3 | WAL 自動 TRUNCATE checkpoint | ✅ Done |
+| P2.4 | 語意 O(n²) quantized cosine prefilter | ✅ Done |
 
 ---
 
-### TODO P0.2 — 解決 `search_code` 全量載入 + 解壓縮
+## P0 — 核心查詢能力對齊
 
-**問題：** `search_code()` 載入所有 files 的 content，解壓縮（zstd/lz4），然後用 `string.contains()` 掃描。對 500+ 檔案的專案非常慢。
+### TODO F1 — Cypher 查詢支援（query_graph）
 
-**改進方式：**
+**DeusData：** `query_graph` 支援 openCypher 讀取子集：MATCH, WHERE, RETURN, ORDER BY, SKIP, LIMIT, DISTINCT, WITH, UNION, OPTIONAL MATCH, 變長路徑 `[*1..3]`, 聚合函數, EXISTS 子查詢。
 
-方案 A（推薦）：SQLite FTS5
-- 在 schema 中建立 `files_fts` 虛擬表
-- indexing 時自動寫入 FTS
-- `search_code()` 走 FTS5 `MATCH`，不回傳 content
+**CBM 現況：** `query_graph` 僅支援 SQL SELECT。
 
-方案 B（最小）：批次解壓 + stream
-- 只拉 path 與 content，但一次只留一個檔案在記憶體
-- 找到 match 後立即回傳，不全部載入
+**實作方式：**
+- 新增 `src/cypher/` 模組：lexer → parser → planner → executor
+- 支援核心子集：`MATCH (n:Label)-[:REL]->(m) WHERE ... RETURN ... ORDER BY ... LIMIT ...`
+- 將 Cypher 翻譯成 SQL 查詢（SQLite 後端）
+- 保留 SQL SELECT 作為 fallback（`query_graph` 自動偵測）
+- 支援函數：labels(), type(), count(), collect(), toLower(), toUpper(), size()
+- 支援 WHERE 運算子：=, <>, <, >, AND, OR, NOT, IN, CONTAINS, STARTS WITH, IS NULL, =~ (regex)
+- 支援 EXISTS { (n)-[:TYPE]->() } 用於 dead code 偵測
 
-**完成條件：**
-
-- `search_code("fn main")` 在 100 個檔案中 < 500ms
-- 大檔案（1MB+）不會造成 OOM
-- 回傳結果包含正確的 line 與 preview
-
----
-
-## P1 — 高優先級效能改善
-
-### TODO P1.1 — 讓 MCP 伺服器可以非同步處理請求
-
-**問題：** `mcp/server.rs` 的 run loop 是純同步：read → process → write，一次只服務一個請求。`index_repository` 花 30 秒時，所有其他工具呼叫排隊。
-
-**改進方式：**
-
-```rust
-// 現在（壞）
-loop {
-    let message = read_stdin_message()?;     // 阻塞
-    let response = self.handle_message(&msg)?; // 同步
-    write_stdout_message(&body, framing)?;
-}
-
-// 改為：使用 tokio 或 thread pool
-// 方案 A：使用 tokio::spawn + 獨立的 stdin/stdout channel
-// 方案 B：對已知長時間的呼叫（index_repository）使用 background thread + 立即回傳
-// 方案 C（務實）：檢查工具名稱，長作業 spawn 到 background thread
-```
-
-**完成條件：**
-
-- 啟動 `index_repository` 後，可以同時執行 `index_status` 而不被阻塞
-- 與 OpenCode MCP client 的相容性不受影響
-- 無 race condition 或資料競爭
+**驗收：**
+- `MATCH (f:Function)-[:CALLS]->(g) WHERE f.name = 'main' RETURN g.name` 正確回傳
+- `MATCH (f:Function) WHERE NOT EXISTS { (f)<-[:CALLS]-() } RETURN f.name` 找到 dead code
+- 不支援的語法回傳明確錯誤訊息
 
 ---
 
-### TODO P1.2 — 解決 `trace_path` N+1 SQL 問題
+### TODO F2 — Dead Code 偵測
 
-**問題：** `trace_path` 對每個 BFS 層級的每個鄰居都會執行 `find_symbol()`（一次 SQL 查詢）。depth=3、fan-out=30 時可能產生 > 1000 次 SQL。
+**DeusData：** 找到零 caller 的函數（排除 entry points），透過 Cypher `WHERE NOT EXISTS { (f)<-[:CALLS]-() }` 或 `get_architecture` 的 hotspots。
 
-**改進方式：**
+**CBM 現況：** 無。
 
-```rust
-// 現在（壞）
-let edge_rows = self.edges_from(&qn)?;  // SQL #1
-for edge in edge_rows {
-    if let Some(sym) = self.find_symbol(neighbor)? { ... }  // SQL #2, #3, #4...
-}
+**實作方式：**
+- 在 `get_architecture` 加入 `dead_code` 欄位
+- 找到所有 label=Function 且無 inbound CALLS 的 symbol
+- 排除 entry points（main, handler, route handler, test）
+- 或在 Cypher 支援後透過 EXISTS 子查詢實現
 
-// 改為：批次收集 + 一次 JOIN 查詢
-// pub fn find_symbols_batch(&self, qns: &[&str]) -> Result<HashMap<String, Symbol>> {
-//     // SELECT ... FROM symbols WHERE qualified_name IN (?1, ?2, ...) AND project = ?
-// }
-```
-
-**完成條件：**
-
-- `trace_path(function_name="run", depth=3, direction="both")` 執行 < 5 次 SQL 查詢
-- 大型圖（10000+ edges）depth=3 能在 2 秒內完成
-- 不改變回傳格式
+**驗收：**
+- `get_architecture` 回傳 `dead_code` 列表
+- 已知 fixture 中的 unused function 被正確識別
 
 ---
 
-### TODO P1.3 — 解決 `vector_search` N+1 查詢問題
+### TODO F3 — check_index_coverage 工具
 
-**問題：** `semantic::vector_search()` 對每個 prefilter 通過的向量都呼叫 `store.find_symbol(&qn)`，又是一個 N+1。
+**DeusData：** 檢查特定路徑/檔案是否被索引，回傳覆蓋率和遺漏的檔案。
 
-**改進方式：**
+**CBM 現況：** 無。
 
-```rust
-// 現在：載入所有向量，逐個 find_symbol
-let entries = store.list_vector_entries()?;  // JOIN symbols, 好
-for (qn, stored, _name, _label, _file_path) in entries {
-    let Some(sym) = store.find_symbol(&qn)? else { continue; };  // 但又一輪查詢！
-    ...
-}
+**實作方式：**
+- 新增 MCP 工具 `check_index_coverage`
+- 參數：`project`, `paths` (array of file paths)
+- 回傳：每個路徑的索引狀態（indexed/missing/partial）、覆蓋率百分比
+- 檢查 files 表中是否有對應記錄
 
-// 改為：list_vector_entries 已經 JOIN symbols，直接使用回傳的 name/label/file_path
-// 或者：vector search 直接使用 JOIN 結果，不需要再次查詢
-```
-
-**完成條件：**
-
-- `vector_search` 完全不需要呼叫 `find_symbol`
-- `search_graph(semantic_query="foo")` 在 500 個向量中 < 1 秒
+**驗收：**
+- 已索引檔案回傳 `indexed: true`
+- 未索引檔案回傳 `indexed: false` 和原因
 
 ---
 
-### TODO P1.4 — 調校 SQLite 連線 pragma
+## P1 — 圖譜豐富度對齊
 
-**問題：** `apply_sqlite_pragmas` 只設定了 `journal_mode=WAL` 和 `synchronous=NORMAL`。沒有設定 `cache_size`、`temp_store`、`mmap_size`（除非環境變數有設）。預設 SQLite cache 僅 2MB，大型查詢會頻繁 page fault。
+### TODO F4 — 更多 Edge Types
 
-**改進方式：**
+**DeusData 額外 edge types：**
+- `DEFINES` / `DEFINES_METHOD`（目前 CBM 用 CONTAINS）
+- `HANDLES`（route handler 關聯）
+- `USAGE` / `USES_TYPE`（型別引用）
+- `CONFIGURES`（設定關聯）
+- `WRITES`（寫入關聯）
+- `MEMBER_OF`（社群成員）
+- `TESTS`（測試關聯）
+- `FILE_CHANGES_WITH`（git co-change）
+- `EMITS` / `LISTENS_ON`（channel 事件）
+- `DATA_FLOWS`（資料流）
+- `ASYNC_CALLS`（非同步呼叫）
 
-```rust
-fn apply_sqlite_pragmas(conn: &Connection) -> Result<()> {
-    conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")?;
-    conn.execute_batch("PRAGMA cache_size = -64000")?;   // 64MB cache
-    conn.execute_batch("PRAGMA temp_store = MEMORY")?;    // temp 放記憶體
-    conn.execute_batch("PRAGMA mmap_size = 268435456")?;  // 256MB mmap（如果平台支援）
-    Ok(())
-}
-```
+**CBM 現況：** CONTAINS, IMPORTS, CALLS, INHERITS, IMPLEMENTS, DECORATES, HTTP_ROUTE, HTTP_CALLS, SIMILAR_TO, SEMANTICALLY_RELATED, RUNTIME_TRACE
 
-**完成條件：**
-
-- 大型查詢（取得 10000+ rows）速度改善至少 2x
-- 與現有 `CBRLM_SQLITE_MMAP_SIZE` 環境變數相容（如果使用者有設定，優先使用）
-- 沒有新增 regression
-
----
-
-## P2 — 中優先級改善
-
-### TODO P2.1 — 減少 `get_architecture()` 中不必要的大量 symbol 載入
-
-**問題：** `get_architecture()` 第 649 行呼叫 `store.list_symbols()` 載入所有 symbols，只為了掃描 `properties_json` 中的 `community_id`。
-
-**改進方式：**
-
-社群資訊應從 meta 表取得，或將 community 存在獨立的 `communities` 表，而非掃描所有 properties_json。
-
-**完成條件：**
-
-- `get_architecture()` 不需載入所有 symbols
-- `community_count` 與 `top_communities` 資訊仍然正確
+**實作優先序：**
+1. `DEFINES` / `DEFINES_METHOD` — 區分 file→class 和 class→method
+2. `TESTS` — 偵測 test 函數與被测函數的關聯
+3. `ASYNC_CALLS` — 偵測 async/await 呼叫
+4. `EMITS` / `LISTENS_ON` — Socket.IO / EventEmitter 偵測
 
 ---
 
-### TODO P2.2 — 加入連線池 / Prepared Statement 快取
+### TODO F5 — gRPC / GraphQL / tRPC 服務偵測
 
-**問題：** 每個 MCP 工具呼叫都 `Store::open(&project)?`，建立新的 SQLite 連線並重新執行 pragma。沒有 prepared statement 快取。
+**DeusData：** 偵測 protobuf 定義、GraphQL schema、tRPC router，建立跨服務 edge。
 
-**改進方式：**
+**CBM 現況：** 僅 HTTP route 偵測。
 
-方案：引入 `StorePool`，依據 project name 快取連線。
-
-```rust
-pub struct StorePool {
-    stores: Mutex<HashMap<String, Store>>,
-}
-impl StorePool {
-    pub fn get(&self, project: &str) -> Result<StoreGuard> { ... }
-}
-```
-
-**完成條件：**
-
-- 連續 10 次 `search_graph` 只產生 1 次 pragma 設定
-- 記憶體使用量不會顯著增加
-- 執行緒安全
+**實作方式：**
+- 新增 `src/pipeline/services.rs`
+- 偵測 `.proto` 檔案 → gRPC service/method 節點
+- 偵測 GraphQL schema → Query/Mutation 節點
+- 偵測 tRPC router → procedure 節點
+- 建立 `HTTP_CALLS` 或新的 `RPC_CALLS` edge
 
 ---
 
-### TODO P2.3 — 控制 WAL 檔案大小
+### TODO F6 — Infrastructure-as-Code 索引
 
-**問題：** `checkpoint()` 使用 PASSIVE 模式，在有讀取器時不會強制 checkpoint。多次增量索引後 WAL 檔案可能非常大，拖慢讀取。
+**DeusData：** Dockerfile、K8s manifest、Kustomize overlay 作為圖譜節點。
 
-**改進方式：**
+**CBM 現況：** 無。
 
-- 在索引完成後檢查 WAL 大小
-- 如果 WAL > 100MB，用 TRUNCATE 模式 checkpoint
-- 或在背景定期執行 checkpoint
-
-**完成條件：**
-
-- 索引後 WAL 檔案 < 10MB
-- 不會因為 checkpoint 阻塞讀取器
-- 不影響正在進行的查詢
+**實作方式：**
+- 偵測 Dockerfile → `Resource` 節點（image, stage）
+- 偵測 K8s YAML → `Resource` 節點（Deployment, Service, etc.）
+- 偵測 Kustomize → `Module` 節點 + IMPORTS edge
+- 建立 cross-reference edge
 
 ---
 
-### TODO P2.4 — 語意傳遞 O(n²) 加入近似搜尋
+### TODO F7 — 套件/模組 Manifest 解析
 
-**問題：** `compute_semantic_edges()` 對所有 symbols 進行 pairwise 比較（O(n²)）。500 個 symbols 約 125K 次比較。
+**DeusData：** 掃描 package.json, go.mod, Cargo.toml, pyproject.toml, composer.json, pubspec.yaml, pom.xml, build.gradle, mix.exs, *.gemspec 來解析 bare specifier。
 
-**改進方式：**
+**CBM 現況：** 僅 tsconfig paths alias 和 Python package root。
 
-使用近似最近鄰居（ANN）或分桶策略：
-- 先用 quantized i8 向量的 cosine 做粗篩
-- 只對粗篩通過的 pair 進行完整 scoring
-- 或使用 HNSW 索引
-
-**完成條件：**
-
-- 語意傳遞在 1000+ symbols 時速度提升至少 5x
-- `SIMILAR_TO` 與 `SEMANTICALLY_RELATED` recall 不下降超過 5%
+**實作方式：**
+- 新增 `src/pipeline/manifests.rs`
+- 解析各語言的 manifest 檔案
+- 將 bare import（如 `@myorg/pkg`, `github.com/foo/bar`）對應到已知 module
+- 改善 IMPORTS edge 的精確度
 
 ---
 
-## P3 — 低優先級/長期改善
+### TODO F8 — BM25 FTS + camelCase 分詞器
 
-### TODO P3.1 — 加入效能指標與自我監控
+**DeusData：** SQLite FTS5 + 自訂 `cbm_camel_split` tokenizer（camelCase / snake_case 感知）。
 
-**問題：** 目前無法知道哪個工具呼叫花了多少時間、哪個 SQL 查詢最慢。
+**CBM 現況：** FTS5 預設 tokenizer。
 
-**改進方式：**
-
-- 在 `Store` 加入查詢時間統計
-- 提供一個 `diagnostics` 工具回傳最近 N 個請求的延遲分佈
-- 使用 tracing event 記錄慢查詢（> 500ms）
-
----
-
-### TODO P3.2 — 為長工具加入進度回報
-
-**問題：** `index_repository` 執行期間 agent 完全不知道進度。
-
-**改進方式：**
-
-- 使用 MCP `notifications/progress`（MCP 2025 規範）
-- 或定時寫入可查詢的進度狀態
+**實作方式：**
+- 在 FTS5 建立時使用自訂 tokenizer
+- 或使用 `unicode61` tokenizer + 在查詢時展開 camelCase
+- 改善搜尋精確度（如搜尋 `handler` 能找到 `RequestHandler`）
 
 ---
 
-### TODO P3.3 — 索引 pipeline 平行化
+## P1 — 運作能力對齊
 
-**問題：** `finalize_index` 中的 edge extraction（structure、imports、calls、routes、inheritance）依序執行。
+### TODO F9 — config 子命令
 
-**改進方式：**
+**DeusData：** `codebase-memory-mcp config set/list/reset` 管理設定（auto_index, auto_index_limit, auto_watch）。
 
-沒有依賴的階段可以平行處理：
-- structure graph（CONTAINS）
-- import 解析
-- 可以在不同 thread 上同時進行
+**CBM 現況：** 僅環境變數。
+
+**實作方式：**
+- 新增 `cbm config set <key> <value>` / `cbm config list` / `cbm config reset <key>`
+- 設定存在 `CBM_CACHE_DIR/config.json`
+- 支援鍵：`auto_index`, `auto_index_limit`, `auto_watch`
 
 ---
 
-## 執行順序建議
+### TODO F10 — 自動索引（Auto-Index on Session Start）
 
-1. **P0.1** + **P0.2** — 搜尋回應速度的核心改善
-2. **P1.1** — 解決 MCP 伺服器阻塞
-3. **P1.2** + **P1.3** — 解決 N+1 SQL 問題
-4. **P1.4** — SQLite pragma 調校（快速見效）
-5. **P2.1** — 減少不必要載入
-6. **P2.2** — 連線池
-7. **P2.3** — WAL 管理
-8. **P2.4** — 語意傳遞最佳化
-9. **P3.x** — 長期改善
+**DeusData：** MCP session 開始時自動索引新專案。
+
+**CBM 現況：** 無。
+
+**實作方式：**
+- 在 MCP `initialize` 時檢查 `auto_index` 設定
+- 如果啟用且專案未索引，自動觸發背景索引
+- 使用 IndexSupervisor 非阻塞執行
+
+---
+
+### TODO F11 — CBM_ALLOWED_ROOT 安全限制
+
+**DeusData：** 限制 `index_repository` 只能索引指定目錄下的路徑。
+
+**CBM 現況：** 無。
+
+**實作方式：**
+- 在 `index_repository` 處理時檢查 `CBM_ALLOWED_ROOT` 環境變數
+- 解析 `repo_path` 的絕對路徑（處理 symlink 和 `..`）
+- 如果路徑不在 allowed root 下，拒絕索引
+
+---
+
+### TODO F12 — 自訂檔案副檔名
+
+**DeusData：** `.codebase-memory.json` 設定 `extra_extensions` 映射。
+
+**CBM 現況：** 無。
+
+**實作方式：**
+- 在索引時讀取 `.codebase-memory.json`（專案根目錄）
+- 讀取全域設定 `~/.config/cbm/config.json`
+- 將額外副檔名映射到已知語言
+
+---
+
+### TODO F13 — 診斷日誌（CBM_DIAGNOSTICS）
+
+**DeusData：** `CBM_DIAGNOSTICS=1` 啟用 NDJSON 軌跡日誌（rss, committed, fd, queries）。
+
+**CBM 現況：** 無。
+
+**實作方式：**
+- 新增 `src/runtime/diagnostics.rs`
+- 每 5 秒寫入一行 NDJSON（rss, query_count, uptime）
+- 檔案路徑：`$TEMP/cbm-diagnostics-<pid>.ndjson`
+- 超過 8MB 時輪替
+
+---
+
+### TODO F14 — 兩層 Artifact 匯出
+
+**DeusData：** Best（zstd-9 + index strip + VACUUM INTO）和 Fast（zstd-3）兩層。
+
+**CBM 現況：** 單層 zstd 匯出。
+
+**實作方式：**
+- 在 `index_repository` 完成後使用 Best 層級
+- 在 watcher 增量更新後使用 Fast 層級
+- 加入 VACUUM INTO 和 index strip
+
+---
+
+## P2 — 語言覆蓋對齊
+
+### TODO F15 — 更多 Tree-sitter 語言
+
+**DeusData：** 158 語言。
+**CBM 現況：** 14 語言（Rust, Python, JS/TS, Go, Java, C, C++, Ruby, C#, PHP, Bash, Kotlin, Swift）。
+
+**優先加入：**
+1. Dart, Scala, Lua, Zig, Haskell, OCaml, Elixir, Erlang
+2. Dockerfile, YAML, JSON, TOML, HTML, CSS, SQL, Markdown
+3. GraphQL, Protobuf, HCL (Terraform)
+4. 其餘按需加入
+
+---
+
+### TODO F16 — Hybrid LSP 型別解析
+
+**DeusData：** 10+ 語言的型別感知呼叫解析（Python, TS/JS, PHP, C#, Go, C/C++, Java, Kotlin, Rust, Perl）。
+
+**CBM 現況：** AST + FunctionRegistry 啟發式解析。
+
+**實作方式（長期）：**
+- 逐語言加入型別推斷
+- 優先：Python（import + dotted path）、TypeScript（generics, JSX）
+- 使用 per-file overlay + cross-file registry
+
+---
+
+## P2 — Agent 生態系對齊
+
+### TODO F17 — 更多 Agent Surface
+
+**DeusData：** 43 個 agent surface。
+**CBM 現況：** ~10 個（Claude, Codex, Gemini, OpenCode, Zed, Aider, Antigravity, KiloCode, Kiro, Qwen）。
+
+**優先加入：**
+1. VS Code, Cursor, Windsurf, Augment
+2. GitHub Copilot CLI, Amazon Q, Continue
+3. Goose, Cline, Warp, Hermes
+4. 其餘按需加入
+
+---
+
+### TODO F18 — Agent 定義（Scout / Verify / Auditor）
+
+**DeusData：** 三層 agent 定義（Scout 快速發現、Verify 任務導向、Auditor 完整審計）。
+
+**CBM 現況：** 無。
+
+**實作方式：**
+- 在 install 時建立三層 agent 定義
+- 每層有不同的工具權限和指導原則
+- Scout：search_graph, trace_path, get_code_snippet
+- Verify：+ query_graph, get_architecture, detect_changes
+- Auditor：+ check_index_coverage, manage_adr
+
+---
+
+### TODO F19 — Tool Profiles
+
+**DeusData：** `--tool-profile scout` / `--tool-profile analysis` 限制 MCP 工具表面。
+
+**CBM 現況：** 無。
+
+**實作方式：**
+- 新增 `--tool-profile` CLI 參數
+- `scout`：7 個快速檢查工具
+- `analysis`：11 個工具
+- 在 `tools/list` 時根據 profile 過濾
+
+---
+
+## P3 — 發行與安全
+
+### TODO F20 — 套件發行通路
+
+**DeusData：** npm, PyPI, Homebrew, Scoop, Winget, Chocolatey, AUR, go install。
+**CBM 現況：** 僅 GitHub Releases + 手動安裝。
+
+**優先：**
+1. npm wrapper（`npx cbm-mcp`）
+2. Homebrew formula
+3. Scoop manifest
+4. 其餘按需
+
+---
+
+### TODO F21 — 安全發行管线
+
+**DeusData：** SLSA Level 3, Sigstore cosign, VirusTotal, CodeQL。
+**CBM 現況：** SHA-256 checksums。
+
+**優先：**
+1. Sigstore cosign 簽名
+2. SLSA provenance
+3. CodeQL SAST
+
+---
+
+### TODO F22 — 自動更新
+
+**DeusData：** `codebase-memory-mcp update` 自動下載新版本。
+
+**CBM 現況：** 無。
+
+---
+
+## 實作優先序
+
+1. **F1** Cypher 查詢（核心差異化能力）
+2. **F2** Dead code 偵測（agent 高價值）
+3. **F3** check_index_coverage（agent 高價值）
+4. **F11** CBM_ALLOWED_ROOT（安全）
+5. **F9** config 子命令（易用性）
+6. **F12** 自訂副檔名（易用性）
+7. **F4** 更多 edge types（圖譜豐富度）
+8. **F8** BM25 + camelCase 分詞（搜尋品質）
+9. **F10** 自動索引（易用性）
+10. **F13** 診斷日誌（維運）
+11. **F15** 更多語言（覆蓋率）
+12. **F17** 更多 agent surface（生態系）
+13. 其餘 P2/P3 項目
 
 ## 驗證閘門
 
-每個 TODO 項目完成後必須通過：
+每個 TODO 完成後必須通過：
 
-- `cargo test --all-targets`（現有測試不應 regression）
-- `cargo clippy --all-targets -- -D warnings`
-- 對應的基準測試（詳見 `test.md`）
+```powershell
+cargo fmt --check
+cargo test --all-targets
+cargo clippy --all-targets -- -D warnings
+cargo build --release
+```

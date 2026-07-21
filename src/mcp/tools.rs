@@ -51,6 +51,7 @@ impl ToolHandler {
             "detect_changes" => self.detect_changes(args),
             "manage_adr" => self.manage_adr(args),
             "ingest_traces" => self.ingest_traces(args),
+            "check_index_coverage" => self.check_index_coverage(args),
             "rlm_workflow" => {
                 let phase = args
                     .get("phase")
@@ -97,6 +98,22 @@ impl ToolHandler {
 
         let path = PathBuf::from(repo_path);
         let mode = IndexMode::parse(mode);
+
+        // Security: restrict indexing to paths within CBM_ALLOWED_ROOT when set.
+        if let Ok(allowed_root) = std::env::var("CBM_ALLOWED_ROOT") {
+            let canonical = path
+                .canonicalize()
+                .map_err(|e| Error::InvalidArgument(format!("cannot resolve repo_path: {e}")))?;
+            let root = PathBuf::from(&allowed_root).canonicalize().map_err(|e| {
+                Error::InvalidArgument(format!("cannot resolve CBM_ALLOWED_ROOT: {e}"))
+            })?;
+            if !canonical.starts_with(&root) {
+                return Err(Error::InvalidArgument(format!(
+                    "repo_path '{}' is outside CBM_ALLOWED_ROOT '{}'",
+                    repo_path, allowed_root
+                )));
+            }
+        }
 
         if background {
             let snap = self.supervisor.start(
@@ -385,6 +402,51 @@ impl ToolHandler {
         })
     }
 
+    fn check_index_coverage(&self, args: &Value) -> Result<Value> {
+        let project = normalize_project_name(Self::require_str(args, "project")?);
+        let paths: Vec<String> = args
+            .get("paths")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|p| p.as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        self.with_store(&project, |store| {
+            let indexed_files = store.list_indexed_paths()?;
+            let mut results = Vec::new();
+            let mut covered = 0usize;
+            for path in &paths {
+                let normalized = path.replace('\\', "/");
+                let is_indexed = indexed_files
+                    .iter()
+                    .any(|f| f.replace('\\', "/") == normalized || f.ends_with(&normalized));
+                if is_indexed {
+                    covered += 1;
+                }
+                results.push(json!({
+                    "path": path,
+                    "indexed": is_indexed,
+                }));
+            }
+            let total = paths.len();
+            let coverage_pct = if total > 0 {
+                (covered as f64 / total as f64 * 100.0).round()
+            } else {
+                100.0
+            };
+            Ok(json!({
+                "project": project,
+                "total_paths": total,
+                "indexed_paths": covered,
+                "coverage_pct": coverage_pct,
+                "files": results,
+            }))
+        })
+    }
+
     fn manage_adr(&self, args: &Value) -> Result<Value> {
         let project = normalize_project_name(Self::require_str(args, "project")?);
         let action = args.get("action").and_then(|v| v.as_str()).unwrap_or("get");
@@ -655,6 +717,22 @@ pub fn tool_definitions() -> Vec<Value> {
                                 "to": { "type": "string" }
                             }
                         }
+                    }
+                }
+            }),
+        ),
+        tool_def(
+            "check_index_coverage",
+            "Check whether specific file paths are indexed in the project graph.",
+            json!({
+                "type": "object",
+                "required": ["project", "paths"],
+                "properties": {
+                    "project": { "type": "string" },
+                    "paths": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "File paths to check coverage for"
                     }
                 }
             }),

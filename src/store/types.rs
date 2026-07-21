@@ -171,6 +171,7 @@ pub struct ArchitectureSummary {
     pub top_functions: Vec<Symbol>,
     pub community_count: usize,
     pub top_communities: Vec<CommunitySummary>,
+    pub dead_code: Vec<Symbol>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

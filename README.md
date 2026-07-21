@@ -265,6 +265,7 @@ cbm cli index_repository --json --quiet '{"repo_path":".","project":"x","mode":"
 | `CBM_MEMORY_BUDGET_MB` | Max memory budget for file indexing, default `512` |
 | `CBM_STORE_IDLE_SECS` | StorePool idle eviction (default `300`) |
 | `CBM_SQLITE_MMAP_SIZE` | Override SQLite mmap size in bytes |
+| `CBM_ALLOWED_ROOT` | Restrict `index_repository` to paths within this directory |
 
 ## MCP Tools
 
@@ -283,6 +284,7 @@ cbm cli index_repository --json --quiet '{"repo_path":".","project":"x","mode":"
 | `detect_changes` | Git-aware change summary |
 | `manage_adr` | Store architecture decision notes |
 | `ingest_traces` | Add runtime trace edges |
+| `check_index_coverage` | Check file path index coverage |
 
 ## Graph Model
 
