@@ -1,4 +1,6 @@
-# CBM - Codebase Memory MCP (Rust)
+# CBM - Codebase Memory MCP (Rust) <!-- omit from agent discover -->
+
+> **Version:** 0.2.0 — Rust MVP stable; concurrent server, semantic prefilter, parity hardening.
 
 CBM is a Rust MCP server and CLI for indexing codebases into a local knowledge graph for AI coding agents. It is designed for OpenCode, Codex, Claude Code, and other MCP-capable developer tools.
 
@@ -14,15 +16,15 @@ Parity status: [`PARITY_MATRIX.md`](PARITY_MATRIX.md)
 
 | Area | Current state |
 |------|---------------|
-| Rust MVP rewrite | Complete through Sections 3-7; ongoing parity hardening |
-| MCP stdio server | Usable; `index_repository background=true` for non-blocking index |
-| CLI tool dispatch | Usable with `--json --quiet` |
-| Agent install hooks | OpenCode, Codex, Claude-style configs (multi-agent install) |
+| Rust MVP rewrite | v0.2.0 stable; concurrent MCP server, background supervisor, parity hardening |
+| MCP stdio server | Concurrent; `index_repository background=true` for non-blocking index |
+| CLI tool dispatch | `cbm cli --json --quiet`; smoke-tested in CI |
+| Agent install hooks | 11+ agents: OpenCode, Codex, Claude, Gemini, Zed, Aider, Antigravity, KiloCode, Kiro, … |
 | Languages (tree-sitter) | 14 families: Rust, Python, JS/TS, Go, Java, C/C++, Ruby, C#, PHP, Bash, Kotlin, Swift |
 | Graph edges | `CONTAINS`, `IMPORTS`, `CALLS`, `INHERITS`, `IMPLEMENTS`, `DECORATES`, `HTTP_ROUTE`, `HTTP_CALLS`, semantic, traces |
 | Graph store | SQLite + FTS5 `search_code` + optional `.codebase-memory/graph.db.zst` |
 | Communities | Louvain modularity (default); `CBM_COMMUNITY_ALGO=components` fallback |
-| Semantic edges | Optional via `CBM_SEMANTIC_ENABLED=1`; tunable weights/thresholds |
+| Semantic edges | Optional via `CBM_SEMANTIC_ENABLED=1`; tunable weights/thresholds, 11-signal prefilter |
 | Full reference parity | Not complete; see `PARITY_MATRIX.md` backlog |
 
 ## For Humans
@@ -228,7 +230,7 @@ For Linux/macOS-only edits, use the `.sh` smoke script where appropriate.
 
 ### Safe Commit Rules
 
-- Do not commit `target/`, `dist/`, cache directories, or local temp files.
+- Do not commit `target/`, `dist/`, `.opencode/`, `.qwen/`, cache directories, or local temp files.
 - Keep docs honest about MVP vs full reference parity.
 - If you change README claims, update `PARITY_MATRIX.md` or `RUST_REWRITE_TODO.md` when the claim affects parity/status.
 - If you add a new supported behavior, add a regression test or smoke gate near the behavior.
@@ -322,15 +324,14 @@ packaging/      Deferred package manager metadata and installers
 
 Keep the Rust MVP stable while closing full-parity gaps deliberately.
 
-1. [`PARITY_MATRIX.md`](PARITY_MATRIX.md) for current claims and blockers.
-2. Hybrid LSP / more languages (beyond the current 14 families).
-3. Packaging channels (npm/scoop/winget) when ready — see `packaging/DEFERRED_CHANNELS.md`.
-2. [`RUST_REWRITE_TODO.md`](RUST_REWRITE_TODO.md) for historical implementation slices.
-3. `tests/calls_pipeline_test.rs` and `tests/cli_process_test.rs` before changing graph precision or CLI behavior.
+- [`PARITY_MATRIX.md`](PARITY_MATRIX.md) for current claims and blockers.
+- [`RUST_REWRITE_TODO.md`](RUST_REWRITE_TODO.md) for historical implementation slices.
+- Hybrid LSP / more languages (beyond the current 14 families).
+- Packaging channels (npm/scoop/winget) when ready — see `packaging/DEFERRED_CHANNELS.md`.
+- `tests/calls_pipeline_test.rs` and `tests/cli_process_test.rs` before changing graph precision or CLI behavior.
 
 High-value backlog areas:
 
 - Leiden multi-resolution communities (Louvain single-level is Done).
 - OpenAPI / richer HTTP route discovery beyond pattern templates.
 - Hybrid LSP type-aware CALLS (beyond FunctionRegistry heuristics).
-- Packaging channels (npm/scoop/winget) — see `packaging/DEFERRED_CHANNELS.md`.
