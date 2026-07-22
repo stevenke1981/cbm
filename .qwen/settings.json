@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo fmt *)",
+      "Bash(cargo clippy *)",
+      "Bash(cargo test *)",
+      "Agent(Explore)",
+      "Bash(cargo check)",
+      "Bash(\\\" *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push)",
+      "Bash(git clone *)"
+    ]
+  },
+  "$version": 4
+}
