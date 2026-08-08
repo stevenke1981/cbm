@@ -1,32 +1,47 @@
-use crate::error::{Error, Result};
+use crate::error::{Error, Result as CbmResult};
 use crate::mcp::tools::{tool_definitions, ToolHandler};
-use crate::mcp::transport::{read_stdin_message, write_stdout_message};
 use crate::rlm::RlmEngine;
 use crate::watcher::Watcher;
-use serde_json::{json, Value};
-use std::sync::{Arc, Mutex};
+use rmcp::model::{
+    CallToolRequestParams, CallToolResult, Content, Implementation, ListToolsResult,
+    PaginatedRequestParams, ServerCapabilities, ServerInfo, Tool,
+};
+use rmcp::service::{RequestContext, RoleServer};
+use rmcp::{ServerHandler, ServiceExt};
+use serde_json::Value;
+use std::sync::Arc;
+use tokio::sync::Semaphore;
 
-pub const SERVER_NAME: &str = "cbm-mcp";
+pub const SERVER_NAME: &str = "codebase-memory-mcp";
 pub const SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
 
+#[derive(Clone)]
 pub struct McpServer {
     handler: Arc<ToolHandler>,
     watcher: Option<Arc<Watcher>>,
+    tools: Arc<Vec<Tool>>,
+    workers: Arc<Semaphore>,
+    worker_limit: usize,
 }
 
 impl McpServer {
     pub fn new() -> Self {
         let rlm = Arc::new(RlmEngine::new());
         let watcher = if watcher_enabled() {
-            let w = Arc::new(Watcher::new());
-            w.refresh_from_disk();
-            Some(w)
+            let watcher = Arc::new(Watcher::new());
+            watcher.refresh_from_disk();
+            Some(watcher)
         } else {
             None
         };
+        let worker_limit = configured_worker_limit();
+
         Self {
             handler: Arc::new(ToolHandler::new(rlm, watcher.clone())),
             watcher,
+            tools: Arc::new(model_tools()),
+            workers: Arc::new(Semaphore::new(worker_limit)),
+            worker_limit,
         }
     }
 
@@ -34,161 +49,234 @@ impl McpServer {
         self.watcher.clone()
     }
 
+    pub fn generated_tool_definitions() -> Vec<Value> {
+        model_tools()
+            .into_iter()
+            .map(|tool| serde_json::to_value(tool).expect("rmcp tool must serialize"))
+            .collect()
+    }
+
     pub fn start_background_services(&self, shutdown: Option<Arc<crate::runtime::Shutdown>>) {
-        if let Some(w) = &self.watcher {
-            let w = w.clone();
-            w.spawn(shutdown);
+        if let Some(watcher) = &self.watcher {
+            watcher.clone().spawn(shutdown);
         }
     }
 
     pub fn stop_services(&self) {
-        if let Some(w) = &self.watcher {
-            w.stop();
+        if let Some(watcher) = &self.watcher {
+            watcher.stop();
         }
     }
 
-    pub fn run(&self) -> Result<()> {
+    pub fn run(&self) -> CbmResult<()> {
         self.run_until_shutdown(None)
     }
 
     pub fn run_until_shutdown(
         &self,
         shutdown: Option<Arc<crate::runtime::Shutdown>>,
-    ) -> Result<()> {
-        // Mutex-protected stdout so concurrent tool threads can write responses.
-        let stdout_lock = Arc::new(Mutex::new(()));
+    ) -> CbmResult<()> {
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .map_err(|error| Error::Other(format!("failed to start Tokio runtime: {error}")))?;
+        let server = self.clone();
 
-        loop {
-            if shutdown.as_ref().is_some_and(|s| s.is_triggered()) {
-                self.stop_services();
-                break;
-            }
-            let Some(message) = read_stdin_message()? else {
-                self.stop_services();
-                break;
-            };
-
-            // Fast path: parse to check if this is a tools/call request.
-            let request: Value = match serde_json::from_str(&message.body) {
-                Ok(v) => v,
-                Err(e) => {
-                    let err = format_error(Value::Null, -32700, &e.to_string())?;
-                    write_stdout_message(&err, message.framing)?;
-                    continue;
-                }
-            };
-            let method = request.get("method").and_then(|m| m.as_str()).unwrap_or("");
-
-            if method == "tools/call" {
-                // Spawn a worker thread so long-running tools don't block stdin.
-                let handler = self.handler.clone();
-                let framing = message.framing;
-                let out = stdout_lock.clone();
-                std::thread::spawn(move || {
-                    let response = handle_request(&handler, &request);
-                    if let Some(body) = response {
-                        let _guard = out.lock().unwrap();
-                        let _ = write_stdout_message(&body, framing);
+        runtime.block_on(async move {
+            if let Some(shutdown) = shutdown {
+                tokio::select! {
+                    result = server.clone().serve_stdio() => result,
+                    _ = wait_for_shutdown(shutdown) => {
+                        server.stop_services();
+                        Ok(())
                     }
-                });
+                }
             } else {
-                // Handle non-tool messages synchronously (initialize, tools/list, etc.)
-                let response = handle_request(&self.handler, &request);
-                if let Some(body) = response {
-                    write_stdout_message(&body, message.framing)?;
+                server.serve_stdio().await
+            }
+        })
+    }
+
+    pub async fn serve_stdio(self) -> CbmResult<()> {
+        let service = self
+            .clone()
+            .serve(rmcp::transport::stdio())
+            .await
+            .map_err(|error| Error::Other(format!("failed to start MCP stdio service: {error}")))?;
+        let result = service.waiting().await;
+        self.stop_services();
+        result
+            .map(|_| ())
+            .map_err(|error| Error::Other(format!("MCP stdio service failed: {error}")))
+    }
+
+    async fn invoke(&self, name: String, args: Value) -> CallToolResult {
+        let permit = match self.workers.clone().acquire_owned().await {
+            Ok(permit) => permit,
+            Err(_) => return tool_error("tool worker pool is shutting down"),
+        };
+
+        let handler = self.handler.clone();
+        let log_name = name.clone();
+        let result = tokio::task::spawn_blocking(move || handler.handle(&name, &args)).await;
+        drop(permit);
+
+        match result {
+            Ok(Ok(value)) => match serde_json::to_string_pretty(&value) {
+                Ok(text) => CallToolResult::success(vec![Content::text(text)]),
+                Err(error) => tool_error(format!("failed to encode tool result: {error}")),
+            },
+            Ok(Err(error)) => tool_error(error.to_string()),
+            Err(error) => {
+                tracing::error!(tool = %log_name, %error, "CBM tool worker failed");
+                tool_error("internal tool worker failure")
+            }
+        }
+    }
+}
+
+impl ServerHandler for McpServer {
+    async fn call_tool(
+        &self,
+        request: CallToolRequestParams,
+        _context: RequestContext<RoleServer>,
+    ) -> std::result::Result<CallToolResult, rmcp::ErrorData> {
+        let name = request.name.to_string();
+        if !self
+            .tools
+            .iter()
+            .any(|tool| tool.name.as_ref() == name.as_str())
+        {
+            return Ok(tool_error(format!("unknown tool: {name}")));
+        }
+
+        let args = Value::Object(request.arguments.unwrap_or_default());
+        Ok(self.invoke(name, args).await)
+    }
+
+    async fn list_tools(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        _context: RequestContext<RoleServer>,
+    ) -> std::result::Result<ListToolsResult, rmcp::ErrorData> {
+        Ok(ListToolsResult {
+            tools: self.tools.as_ref().clone(),
+            meta: None,
+            next_cursor: None,
+        })
+    }
+
+    fn get_tool(&self, name: &str) -> Option<Tool> {
+        self.tools
+            .iter()
+            .find(|tool| tool.name.as_ref() == name)
+            .cloned()
+    }
+
+    fn get_info(&self) -> ServerInfo {
+        let watcher_on = self.watcher.is_some();
+        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
+            .with_server_info(Implementation::new(SERVER_NAME, SERVER_VERSION))
+            .with_instructions(format!(
+                "CBM graph + RLM server. Index with index_repository, query with search_graph/trace_path/query_graph, and use rlm_* for long-context map-reduce. Git watcher: {watcher_on}. Tool worker limit: {}.",
+                self.worker_limit
+            ))
+    }
+}
+
+async fn wait_for_shutdown(shutdown: Arc<crate::runtime::Shutdown>) {
+    while !shutdown.is_triggered() {
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+}
+
+fn model_tools() -> Vec<Tool> {
+    tool_definitions()
+        .into_iter()
+        .map(tool_from_value)
+        .collect()
+}
+
+fn tool_from_value(raw: Value) -> Tool {
+    let name = raw
+        .get("name")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown")
+        .to_string();
+    let description = raw
+        .get("description")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    let mut schema = raw
+        .get("inputSchema")
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!({"type": "object", "properties": {}}));
+    normalize_json_schema_node(&mut schema);
+    let schema = schema.as_object().cloned().unwrap_or_default();
+
+    Tool::new(name, description, Arc::new(schema))
+}
+
+fn normalize_json_schema_node(value: &mut Value) {
+    match value {
+        Value::Bool(_) => *value = Value::Object(Default::default()),
+        Value::Object(object) => {
+            for key in ["properties", "patternProperties", "$defs", "definitions"] {
+                if let Some(Value::Object(children)) = object.get_mut(key) {
+                    for child in children.values_mut() {
+                        normalize_json_schema_node(child);
+                    }
+                }
+            }
+            for key in [
+                "items",
+                "additionalProperties",
+                "contains",
+                "not",
+                "if",
+                "then",
+                "else",
+                "propertyNames",
+            ] {
+                if let Some(child) = object.get_mut(key) {
+                    normalize_json_schema_node(child);
+                }
+            }
+            for key in ["allOf", "anyOf", "oneOf", "prefixItems"] {
+                if let Some(Value::Array(items)) = object.get_mut(key) {
+                    for item in items {
+                        normalize_json_schema_node(item);
+                    }
                 }
             }
         }
-        Ok(())
-    }
-
-    pub fn handle_message(&self, raw: &str) -> Result<Option<String>> {
-        let request: Value = serde_json::from_str(raw)?;
-        Ok(handle_request(&self.handler, &request))
+        _ => {}
     }
 }
 
-fn handle_initialize() -> Value {
-    let watcher_on = watcher_enabled();
-    json!({
-        "protocolVersion": "2024-11-05",
-        "capabilities": {
-            "tools": { "listChanged": false }
-        },
-        "serverInfo": {
-            "name": SERVER_NAME,
-            "version": SERVER_VERSION
-        },
-        "instructions": format!(
-            "CBM server. Index first with index_repository. RLM: rlm_workflow → filter → map → reduce. Projects use cbm+ prefix. Git watcher: {watcher_on}."
-        )
-    })
-}
-
-fn handle_tool_call(handler: &ToolHandler, request: &Value) -> Result<Value> {
-    let params = request
-        .get("params")
-        .ok_or_else(|| Error::InvalidArgument("missing params".into()))?;
-    let name = params
-        .get("name")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| Error::InvalidArgument("missing tool name".into()))?;
-    let args = params.get("arguments").cloned().unwrap_or(json!({}));
-    let result = handler.handle(name, &args)?;
-    Ok(json!({
-        "content": [{
-            "type": "text",
-            "text": serde_json::to_string_pretty(&result)?
-        }],
-        "isError": false
-    }))
-}
-
-/// Dispatch a parsed JSON-RPC request. Usable from any thread.
-fn handle_request(handler: &ToolHandler, request: &Value) -> Option<String> {
-    let id = request.get("id").cloned();
-    let method = request.get("method").and_then(|m| m.as_str()).unwrap_or("");
-
-    let result = match method {
-        "initialize" => Ok(handle_initialize()),
-        "notifications/initialized" | "initialized" => return None,
-        "ping" => Ok(json!({})),
-        "tools/list" => Ok(json!({ "tools": tool_definitions() })),
-        "tools/call" => handle_tool_call(handler, request),
-        _ => {
-            id.as_ref()?;
-            Err(Error::InvalidArgument(format!("unknown method: {method}")))
-        }
-    };
-
-    match (id, result) {
-        (None, _) => None,
-        (Some(id), Ok(value)) => format_response(id, value).ok(),
-        (Some(id), Err(e)) => format_error(id, -32603, &e.to_string()).ok(),
-    }
+fn tool_error(message: impl Into<String>) -> CallToolResult {
+    CallToolResult::error(vec![Content::text(message.into())])
 }
 
 fn watcher_enabled() -> bool {
-    !matches!(
-        std::env::var("CBM_WATCHER").as_deref(),
-        Ok("0") | Ok("false") | Ok("off")
-    )
+    let value = std::env::var("CBM_WATCHER")
+        .or_else(|_| std::env::var("CBRLM_WATCHER"))
+        .unwrap_or_default();
+    !matches!(value.as_str(), "0" | "false" | "off")
 }
 
-fn format_response(id: Value, result: Value) -> Result<String> {
-    Ok(serde_json::to_string(&json!({
-        "jsonrpc": "2.0",
-        "id": id,
-        "result": result
-    }))?)
-}
-
-fn format_error(id: Value, code: i32, message: &str) -> Result<String> {
-    Ok(serde_json::to_string(&json!({
-        "jsonrpc": "2.0",
-        "id": id,
-        "error": { "code": code, "message": message }
-    }))?)
+fn configured_worker_limit() -> usize {
+    std::env::var("CBM_MAX_TOOL_WORKERS")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or_else(|| {
+            std::thread::available_parallelism()
+                .map(|value| value.get())
+                .unwrap_or(2)
+                .clamp(1, 4)
+        })
 }
 
 impl Default for McpServer {
@@ -201,34 +289,33 @@ impl Default for McpServer {
 mod tests {
     use super::*;
 
+    fn assert_server_handler<T: ServerHandler>() {}
+
     #[test]
-    fn handles_initialize() {
-        std::env::set_var("CBM_WATCHER", "0");
-        std::env::set_var("CBM_UI", "0");
-        let server = McpServer::new();
-        let req = json!({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "initialize",
-            "params": {}
-        });
-        let resp = server.handle_message(&req.to_string()).unwrap().unwrap();
-        assert!(resp.contains("cbm-mcp"));
+    fn uses_official_rmcp_server_handler() {
+        assert_server_handler::<McpServer>();
+        assert_eq!(SERVER_NAME, "codebase-memory-mcp");
     }
 
     #[test]
-    fn lists_tools() {
-        std::env::set_var("CBM_WATCHER", "0");
-        std::env::set_var("CBM_UI", "0");
-        let server = McpServer::new();
-        let req = json!({
-            "jsonrpc": "2.0",
-            "id": 2,
-            "method": "tools/list",
-            "params": {}
-        });
-        let resp = server.handle_message(&req.to_string()).unwrap().unwrap();
-        assert!(resp.contains("index_repository"));
-        assert!(resp.contains("rlm_workflow"));
+    fn exposes_graph_and_rlm_tools() {
+        let names: Vec<String> = McpServer::generated_tool_definitions()
+            .into_iter()
+            .filter_map(|tool| {
+                tool.get("name")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            })
+            .collect();
+
+        assert!(names.iter().any(|name| name == "index_repository"));
+        assert!(names.iter().any(|name| name == "rlm_workflow"));
+        assert!(names.iter().any(|name| name == "check_index_coverage"));
+    }
+
+    #[test]
+    fn worker_limit_is_bounded_by_default() {
+        std::env::remove_var("CBM_MAX_TOOL_WORKERS");
+        assert!((1..=4).contains(&configured_worker_limit()));
     }
 }

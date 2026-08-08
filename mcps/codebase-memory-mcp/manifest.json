@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "name": "codebase-memory-mcp",
+  "displayName": "CBM — Codebase Memory + RLM",
+  "binary": "cbm",
+  "transport": "stdio",
+  "serverInfo": {
+    "name": "codebase-memory-mcp",
+    "versionSource": "Cargo.toml"
+  },
+  "capabilities": {
+    "tools": true
+  },
+  "tools": [
+    "index_repository",
+    "search_graph",
+    "trace_path",
+    "get_code_snippet",
+    "get_graph_schema",
+    "get_architecture",
+    "search_code",
+    "list_projects",
+    "delete_project",
+    "index_status",
+    "query_graph",
+    "detect_changes",
+    "manage_adr",
+    "ingest_traces",
+    "check_index_coverage",
+    "rlm_workflow",
+    "rlm_filter",
+    "rlm_read_symbol",
+    "rlm_scan",
+    "rlm_chunk",
+    "rlm_peek",
+    "rlm_session_list",
+    "rlm_session_delete"
+  ],
+  "environment": {
+    "CBM_WATCHER": {
+      "description": "Set to 0, false, or off to disable the adaptive background watcher.",
+      "default": "1"
+    },
+    "CBM_MAX_TOOL_WORKERS": {
+      "description": "Maximum concurrent blocking MCP tool calls.",
+      "default": "min(logical CPUs, 4)"
+    },
+    "CBM_CACHE_DIR": {
+      "description": "Override the local graph and session cache directory."
+    },
+    "CBM_ALLOWED_ROOT": {
+      "description": "Optional security boundary for repository indexing paths."
+    }
+  },
+  "integration": {
+    "sourceRepositories": [
+      "stevenke1981/cbm",
+      "stevenke1981/cbm-mcp"
+    ],
+    "mode": "single-binary"
+  }
+}
