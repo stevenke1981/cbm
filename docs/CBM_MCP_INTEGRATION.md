@@ -5,10 +5,13 @@ This branch folds the operational parts of `stevenke1981/cbm-mcp` into the main
 
 ## What is integrated
 
-- Official Rust MCP SDK transport (`rmcp 1.7.0`) and stdio lifecycle.
+- Official Rust MCP SDK transport (`rmcp` 1.x) and stdio lifecycle from the
+  `cbm-mcp` project.
 - The existing `cbm` graph tools, background indexing, semantic search, 14
   tree-sitter language families, and integrated RLM tools.
 - One server process and one installed `cbm` executable.
+- The stable MCP server identifier remains `cbm-mcp`, so existing Codex,
+  Claude, OpenCode, and other client configurations continue to work.
 - MCP tool schemas are adapted from the existing `cbm` definitions, so current
   clients keep the same argument names while gaining the official SDK transport.
 - The `codebase-memory` agent skill is stored under
@@ -44,6 +47,10 @@ fall into the former 250 ms retry loop.
 
 Git status and HEAD are collected in one process with
 `git status --porcelain=v2 --branch`.
+
+Dirty-file signatures include path, size, and modification time. This avoids
+re-indexing an unchanged dirty set while still detecting a second edit to the
+same file before it is committed.
 
 ## Tool concurrency
 
@@ -82,9 +89,12 @@ CBM_WATCHER=0 cbm
 The branch includes:
 
 - unit tests for idle backoff and the one-minute cap;
+- a regression test for editing the same dirty file more than once;
 - parser tests for Git porcelain v2 output;
 - an official `rmcp` client/server duplex test;
-- checks that graph and RLM tools are both advertised.
+- checks that graph and RLM tools are both advertised;
+- compatibility tests for the former direct JSON-RPC entry point and stable
+  `cbm-mcp` server identity.
 
 Run the full repository gates:
 

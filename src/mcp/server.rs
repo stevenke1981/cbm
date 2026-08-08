@@ -12,7 +12,7 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 
-pub const SERVER_NAME: &str = "codebase-memory-mcp";
+pub const SERVER_NAME: &str = "cbm-mcp";
 pub const SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Clone)]
@@ -383,7 +383,7 @@ mod tests {
     #[test]
     fn uses_official_rmcp_server_handler() {
         assert_server_handler::<McpServer>();
-        assert_eq!(SERVER_NAME, "codebase-memory-mcp");
+        assert_eq!(std::hint::black_box(SERVER_NAME), "cbm-mcp");
     }
 
     #[test]

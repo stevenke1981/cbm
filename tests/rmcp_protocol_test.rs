@@ -6,7 +6,7 @@ fn assert_server_handler<T: ServerHandler>() {}
 #[test]
 fn cbm_uses_official_rmcp_server_handler() {
     assert_server_handler::<McpServer>();
-    assert_eq!(SERVER_NAME, "codebase-memory-mcp");
+    assert_eq!(std::hint::black_box(SERVER_NAME), "cbm-mcp");
 }
 
 #[tokio::test]

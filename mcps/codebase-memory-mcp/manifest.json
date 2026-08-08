@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "name": "codebase-memory-mcp",
+  "name": "cbm-mcp",
   "displayName": "CBM — Codebase Memory + RLM",
   "binary": "cbm",
   "transport": "stdio",
   "serverInfo": {
-    "name": "codebase-memory-mcp",
+    "name": "cbm-mcp",
     "versionSource": "Cargo.toml"
   },
   "capabilities": {

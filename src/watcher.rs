@@ -2,11 +2,12 @@ use crate::discover::IndexMode;
 use crate::git::{self, GitStatus};
 use crate::pipeline::Pipeline;
 use crate::store::Store;
+use std::fmt::Write as _;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, UNIX_EPOCH};
 use tracing::{debug, info, warn};
 
 const BASE_INTERVAL_MS: u64 = 5_000;
@@ -183,7 +184,7 @@ impl Watcher {
             }
 
             let changed = collect_changed_files(state, &git_status);
-            let signature = status_signature(&git_status, &changed);
+            let signature = status_signature(state, &git_status, &changed);
 
             if !should_reindex(state, &git_status, &signature) {
                 apply_backoff(state, now);
@@ -253,7 +254,7 @@ impl Watcher {
             }
         }
 
-        next_wake.clamp(MIN_TICK_MS, MAX_INTERVAL_MS)
+        bounded_wake(next_wake)
     }
 
     fn refresh_projects_if_due(&self, now: Instant) {
@@ -296,6 +297,10 @@ fn next_interval(current_ms: u64) -> u64 {
         .min(MAX_INTERVAL_MS)
 }
 
+fn bounded_wake(interval_ms: u64) -> u64 {
+    interval_ms.clamp(MIN_TICK_MS, MAX_INTERVAL_MS)
+}
+
 fn repo_is_clean(state: &WatchState, git: &GitStatus) -> bool {
     if git.dirty {
         return false;
@@ -308,12 +313,35 @@ fn repo_is_clean(state: &WatchState, git: &GitStatus) -> bool {
     }
 }
 
-fn status_signature(git: &GitStatus, changed: &[String]) -> String {
+fn status_signature(state: &WatchState, git: &GitStatus, changed: &[String]) -> String {
     let head = git.head.as_deref().unwrap_or("no-head");
     if changed.is_empty() {
         return format!("{head}:clean");
     }
-    format!("{head}:{}", changed.join(","))
+
+    let mut signature = format!("{head}:");
+    for path in changed {
+        let full_path = state.repo_path.join(path);
+        match std::fs::metadata(&full_path) {
+            Ok(metadata) => {
+                let modified_ns = metadata
+                    .modified()
+                    .ok()
+                    .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok())
+                    .map(|duration| duration.as_nanos())
+                    .unwrap_or_default();
+                let _ = write!(
+                    signature,
+                    "{path}:{}:{modified_ns};",
+                    metadata.len()
+                );
+            }
+            Err(_) => {
+                let _ = write!(signature, "{path}:missing;");
+            }
+        }
+    }
+    signature
 }
 
 fn should_reindex(state: &WatchState, git: &GitStatus, signature: &str) -> bool {
@@ -332,14 +360,13 @@ fn should_reindex(state: &WatchState, git: &GitStatus, signature: &str) -> bool 
 
 fn collect_changed_files(state: &WatchState, git: &GitStatus) -> Vec<String> {
     let mut files = git.changed_files.clone();
-    if let (Some(old), Some(new)) = (&state.last_head, &git.head) {
-        if old != new {
-            if let Ok(diff) = git::diff_changed_files(&state.repo_path, old, new) {
-                for file in diff {
-                    if !files.contains(&file) {
-                        files.push(file);
-                    }
-                }
+    if let (Some(old), Some(new)) = (&state.last_head, &git.head)
+        && old != new
+        && let Ok(diff) = git::diff_changed_files(&state.repo_path, old, new)
+    {
+        for file in diff {
+            if !files.contains(&file) {
+                files.push(file);
             }
         }
     }
@@ -382,15 +409,19 @@ mod tests {
     fn signature_includes_head_and_files() {
         let git = git_with(&["a.rs", "b.rs"], "abc123");
         let changed = vec!["a.rs".into(), "b.rs".into()];
-        let signature = status_signature(&git, &changed);
-        assert_eq!(signature, "abc123:a.rs,b.rs");
+        let state = state_with(None, Some("abc123"));
+        let signature = status_signature(&state, &git, &changed);
+        assert!(signature.starts_with("abc123:"));
+        assert!(signature.contains("a.rs:"));
+        assert!(signature.contains("b.rs:"));
     }
 
     #[test]
     fn skips_reindex_when_dirty_signature_unchanged() {
         let git = git_with(&["lib.rs"], "head1");
         let changed = vec!["lib.rs".into()];
-        let signature = status_signature(&git, &changed);
+        let state = state_with(None, Some("head1"));
+        let signature = status_signature(&state, &git, &changed);
         let state = state_with(Some(&signature), Some("head1"));
         assert!(!should_reindex(&state, &git, &signature));
     }
@@ -399,9 +430,30 @@ mod tests {
     fn reindexes_when_dirty_file_set_changes() {
         let git = git_with(&["lib.rs", "main.rs"], "head1");
         let changed = vec!["lib.rs".into(), "main.rs".into()];
-        let signature = status_signature(&git, &changed);
-        let state = state_with(Some("head1:lib.rs"), Some("head1"));
+        let state = state_with(None, Some("head1"));
+        let signature = status_signature(&state, &git, &changed);
+        let state = state_with(Some("head1:lib.rs:missing;"), Some("head1"));
         assert!(should_reindex(&state, &git, &signature));
+    }
+
+    #[test]
+    fn reindexes_when_same_dirty_file_changes_again() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let file = dir.path().join("lib.rs");
+        std::fs::write(&file, "fn first() {}\n").unwrap();
+
+        let git = git_with(&["lib.rs"], "head1");
+        let changed = vec!["lib.rs".into()];
+        let mut state = state_with(None, Some("head1"));
+        state.repo_path = dir.path().to_path_buf();
+        let first = status_signature(&state, &git, &changed);
+
+        std::fs::write(&file, "fn first() {}\nfn second() {}\n").unwrap();
+        let second = status_signature(&state, &git, &changed);
+        state.last_dirty_signature = Some(first.clone());
+
+        assert_ne!(first, second);
+        assert!(should_reindex(&state, &git, &second));
     }
 
     #[test]
@@ -412,8 +464,8 @@ mod tests {
             changed_files: vec![],
             deleted_files: vec![],
         };
-        let signature = status_signature(&git, &[]);
         let state = state_with(None, Some("oldhead"));
+        let signature = status_signature(&state, &git, &[]);
         assert!(should_reindex(&state, &git, &signature));
     }
 
@@ -426,8 +478,8 @@ mod tests {
     }
 
     #[test]
-    fn minimum_wake_tick_is_not_a_busy_loop() {
-        assert!(MIN_TICK_MS >= 1_000);
-        assert!(PROJECT_REFRESH_INTERVAL_MS >= MAX_INTERVAL_MS);
+    fn wake_interval_never_enters_a_busy_loop() {
+        assert_eq!(bounded_wake(0), MIN_TICK_MS);
+        assert_eq!(bounded_wake(MAX_INTERVAL_MS + 1), MAX_INTERVAL_MS);
     }
 }
