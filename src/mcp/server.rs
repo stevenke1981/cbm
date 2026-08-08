@@ -8,7 +8,7 @@ use rmcp::model::{
 };
 use rmcp::service::{RequestContext, RoleServer};
 use rmcp::{ServerHandler, ServiceExt};
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 
@@ -108,6 +108,15 @@ impl McpServer {
         result
             .map(|_| ())
             .map_err(|error| Error::Other(format!("MCP stdio service failed: {error}")))
+    }
+
+    /// Compatibility entry point for existing embedders and integration tests.
+    ///
+    /// Production stdio traffic is handled by `rmcp`; this helper preserves the
+    /// former direct JSON-RPC API without creating worker threads.
+    pub fn handle_message(&self, raw: &str) -> CbmResult<Option<String>> {
+        let request: Value = serde_json::from_str(raw)?;
+        Ok(handle_compat_request(&self.handler, &request))
     }
 
     async fn invoke(&self, name: String, args: Value) -> CallToolResult {
@@ -255,6 +264,83 @@ fn normalize_json_schema_node(value: &mut Value) {
     }
 }
 
+fn handle_compat_initialize() -> Value {
+    let watcher_on = watcher_enabled();
+    json!({
+        "protocolVersion": "2024-11-05",
+        "capabilities": {
+            "tools": { "listChanged": false }
+        },
+        "serverInfo": {
+            "name": SERVER_NAME,
+            "version": SERVER_VERSION
+        },
+        "instructions": format!(
+            "CBM graph + RLM server. Projects use the cbm+ prefix. Git watcher: {watcher_on}."
+        )
+    })
+}
+
+fn handle_compat_tool_call(handler: &ToolHandler, request: &Value) -> CbmResult<Value> {
+    let params = request
+        .get("params")
+        .ok_or_else(|| Error::InvalidArgument("missing params".into()))?;
+    let name = params
+        .get("name")
+        .and_then(Value::as_str)
+        .ok_or_else(|| Error::InvalidArgument("missing tool name".into()))?;
+    let args = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
+    let result = handler.handle(name, &args)?;
+    Ok(json!({
+        "content": [{
+            "type": "text",
+            "text": serde_json::to_string_pretty(&result)?
+        }],
+        "isError": false
+    }))
+}
+
+fn handle_compat_request(handler: &ToolHandler, request: &Value) -> Option<String> {
+    let id = request.get("id").cloned();
+    let method = request.get("method").and_then(Value::as_str).unwrap_or("");
+
+    let result = match method {
+        "initialize" => Ok(handle_compat_initialize()),
+        "notifications/initialized" | "initialized" => return None,
+        "ping" => Ok(json!({})),
+        "tools/list" => Ok(json!({ "tools": tool_definitions() })),
+        "tools/call" => handle_compat_tool_call(handler, request),
+        _ => {
+            if id.is_none() {
+                return None;
+            }
+            Err(Error::InvalidArgument(format!("unknown method: {method}")))
+        }
+    };
+
+    match (id, result) {
+        (None, _) => None,
+        (Some(id), Ok(value)) => format_compat_response(id, value).ok(),
+        (Some(id), Err(error)) => format_compat_error(id, -32603, &error.to_string()).ok(),
+    }
+}
+
+fn format_compat_response(id: Value, result: Value) -> CbmResult<String> {
+    Ok(serde_json::to_string(&json!({
+        "jsonrpc": "2.0",
+        "id": id,
+        "result": result
+    }))?)
+}
+
+fn format_compat_error(id: Value, code: i32, message: &str) -> CbmResult<String> {
+    Ok(serde_json::to_string(&json!({
+        "jsonrpc": "2.0",
+        "id": id,
+        "error": { "code": code, "message": message }
+    }))?)
+}
+
 fn tool_error(message: impl Into<String>) -> CallToolResult {
     CallToolResult::error(vec![Content::text(message.into())])
 }
@@ -307,6 +393,24 @@ mod tests {
         assert!(names.iter().any(|name| name == "index_repository"));
         assert!(names.iter().any(|name| name == "rlm_workflow"));
         assert!(names.iter().any(|name| name == "check_index_coverage"));
+    }
+
+    #[test]
+    fn direct_json_rpc_compatibility_is_preserved() {
+        std::env::set_var("CBM_WATCHER", "0");
+        let server = McpServer::new();
+        let request = json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/list",
+            "params": {}
+        });
+        let response = server
+            .handle_message(&request.to_string())
+            .expect("handle request")
+            .expect("response");
+        assert!(response.contains("index_repository"));
+        assert!(response.contains("rlm_workflow"));
     }
 
     #[test]
