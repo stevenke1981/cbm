@@ -289,7 +289,10 @@ fn handle_compat_tool_call(handler: &ToolHandler, request: &Value) -> CbmResult<
         .get("name")
         .and_then(Value::as_str)
         .ok_or_else(|| Error::InvalidArgument("missing tool name".into()))?;
-    let args = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
+    let args = params
+        .get("arguments")
+        .cloned()
+        .unwrap_or_else(|| json!({}));
     let result = handler.handle(name, &args)?;
     Ok(json!({
         "content": [{
