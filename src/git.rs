@@ -67,9 +67,7 @@ pub fn status(path: &Path) -> Result<GitStatus> {
         }));
     }
 
-    Ok(parse_porcelain_v2(&String::from_utf8_lossy(
-        &output.stdout,
-    )))
+    Ok(parse_porcelain_v2(&String::from_utf8_lossy(&output.stdout)))
 }
 
 fn parse_porcelain_v2(output: &str) -> GitStatus {

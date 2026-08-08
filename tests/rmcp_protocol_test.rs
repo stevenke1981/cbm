@@ -29,13 +29,9 @@ async fn official_client_lists_graph_and_rlm_tools() {
 
     assert_eq!(tools.len(), 23);
     assert!(tools.iter().any(|tool| tool.name == "index_repository"));
-    assert!(tools
-        .iter()
-        .any(|tool| tool.name == "check_index_coverage"));
+    assert!(tools.iter().any(|tool| tool.name == "check_index_coverage"));
     assert!(tools.iter().any(|tool| tool.name == "rlm_workflow"));
-    assert!(tools
-        .iter()
-        .any(|tool| tool.name == "rlm_session_list"));
+    assert!(tools.iter().any(|tool| tool.name == "rlm_session_list"));
 
     let projects = client
         .call_tool(CallToolRequestParams::new("list_projects"))

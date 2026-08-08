@@ -301,11 +301,7 @@ mod tests {
     fn exposes_graph_and_rlm_tools() {
         let names: Vec<String> = McpServer::generated_tool_definitions()
             .into_iter()
-            .filter_map(|tool| {
-                tool.get("name")
-                    .and_then(Value::as_str)
-                    .map(str::to_string)
-            })
+            .filter_map(|tool| tool.get("name").and_then(Value::as_str).map(str::to_string))
             .collect();
 
         assert!(names.iter().any(|name| name == "index_repository"));
