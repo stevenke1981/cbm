@@ -10,47 +10,6 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  restore-tested-lockfile:
-    name: Restore tested Cargo.lock
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
-    permissions:
-      actions: read
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref }}
-
-      - name: download tested lockfile artifact
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          curl --fail --location \
-            --header "Authorization: Bearer ${GH_TOKEN}" \
-            --header "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/9015340246/zip" \
-            --output /tmp/resolved-cargo-lock.zip
-          rm -rf /tmp/resolved-cargo-lock
-          mkdir -p /tmp/resolved-cargo-lock
-          unzip -o /tmp/resolved-cargo-lock.zip -d /tmp/resolved-cargo-lock
-          cp /tmp/resolved-cargo-lock/Cargo.lock Cargo.lock
-          echo "2a86dee0e3fae218bf55e420e16db4ed8c0ba7deb7a3c37c6225febc87cf0c01  Cargo.lock" | sha256sum --check
-
-      - name: commit tested Cargo.lock when changed
-        shell: bash
-        run: |
-          if git diff --quiet -- Cargo.lock; then
-            echo "Tested Cargo.lock is already committed"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock
-          git commit -m "build: minimize Cargo.lock update"
-          git push origin "HEAD:${{ github.head_ref }}"
-
   test:
     name: Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
