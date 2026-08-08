@@ -330,11 +330,7 @@ fn status_signature(state: &WatchState, git: &GitStatus, changed: &[String]) -> 
                     .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok())
                     .map(|duration| duration.as_nanos())
                     .unwrap_or_default();
-                let _ = write!(
-                    signature,
-                    "{path}:{}:{modified_ns};",
-                    metadata.len()
-                );
+                let _ = write!(signature, "{path}:{}:{modified_ns};", metadata.len());
             }
             Err(_) => {
                 let _ = write!(signature, "{path}:missing;");
@@ -360,13 +356,14 @@ fn should_reindex(state: &WatchState, git: &GitStatus, signature: &str) -> bool 
 
 fn collect_changed_files(state: &WatchState, git: &GitStatus) -> Vec<String> {
     let mut files = git.changed_files.clone();
-    if let (Some(old), Some(new)) = (&state.last_head, &git.head)
-        && old != new
-        && let Ok(diff) = git::diff_changed_files(&state.repo_path, old, new)
-    {
-        for file in diff {
-            if !files.contains(&file) {
-                files.push(file);
+    if let (Some(old), Some(new)) = (&state.last_head, &git.head) {
+        if old != new {
+            if let Ok(diff) = git::diff_changed_files(&state.repo_path, old, new) {
+                for file in diff {
+                    if !files.contains(&file) {
+                        files.push(file);
+                    }
+                }
             }
         }
     }
