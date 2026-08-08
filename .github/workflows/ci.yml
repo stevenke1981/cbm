@@ -10,35 +10,6 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  refresh-lockfile:
-    name: Refresh Cargo.lock
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref }}
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: resolve dependencies
-        run: cargo generate-lockfile
-
-      - name: commit Cargo.lock when changed
-        shell: bash
-        run: |
-          if git diff --quiet -- Cargo.lock; then
-            echo "Cargo.lock is already current"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock
-          git commit -m "build: refresh Cargo.lock"
-          git push origin "HEAD:${{ github.head_ref }}"
-
   test:
     name: Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -61,14 +32,9 @@ jobs:
       - name: cargo test
         run: cargo test --all-targets
 
-      - name: upload resolved Cargo.lock
-        if: runner.os == 'Linux'
-        uses: actions/upload-artifact@v4
-        with:
-          name: resolved-cargo-lock
-          path: Cargo.lock
-          if-no-files-found: error
-          retention-days: 1
+      - name: Cargo.lock is committed
+        shell: bash
+        run: git diff --exit-code -- Cargo.lock
 
       - name: cargo clippy
         run: cargo clippy --all-targets -- -D warnings
