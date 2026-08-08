@@ -314,9 +314,7 @@ fn handle_compat_request(handler: &ToolHandler, request: &Value) -> Option<Strin
         "tools/list" => Ok(json!({ "tools": tool_definitions() })),
         "tools/call" => handle_compat_tool_call(handler, request),
         _ => {
-            if id.is_none() {
-                return None;
-            }
+            id.as_ref()?;
             Err(Error::InvalidArgument(format!("unknown method: {method}")))
         }
     };

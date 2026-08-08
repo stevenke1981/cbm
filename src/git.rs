@@ -88,10 +88,8 @@ fn parse_porcelain_v2(output: &str) -> GitStatus {
             parse_changed_record(rest, 9, 8)
         } else if let Some(rest) = line.strip_prefix("u ") {
             parse_changed_record(rest, 11, 10)
-        } else if let Some(path) = line.strip_prefix("? ") {
-            Some(("??", path))
         } else {
-            None
+            line.strip_prefix("? ").map(|path| ("??", path))
         };
 
         let Some((code, raw_path)) = parsed else {
